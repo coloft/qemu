@@ -66,6 +66,11 @@ MigrationIncomingState *migration_incoming_get_current(void);
 MigrationIncomingState *migration_incoming_state_new(QEMUFile *f);
 void migration_incoming_state_destroy(void);
 
+typedef struct COLOState COLOState;
+struct COLOState {
+    QEMUSizedBuffer *buffer;
+};
+
 struct MigrationState
 {
     int64_t bandwidth_limit;
@@ -88,6 +93,8 @@ struct MigrationState
     int64_t xbzrle_cache_size;
     int64_t setup_time;
     int64_t dirty_sync_count;
+
+    COLOState colo_state;
 };
 
 void migrate_set_state(int *state, int old_state, int new_state);
