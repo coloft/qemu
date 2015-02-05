@@ -12,6 +12,7 @@
 
 #include "migration/colo.h"
 #include "qmp-commands.h"
+#include "net/colo-nic.h"
 
 bool colo_supported(void)
 {
@@ -35,6 +36,14 @@ void colo_init_checkpointer(MigrationState *s)
 void *colo_process_incoming_checkpoints(void *opaque)
 {
     return NULL;
+}
+
+void colo_add_nic_devices(COLONicState *cns)
+{
+}
+
+void colo_remove_nic_devices(COLONicState *cns)
+{
 }
 
 void qmp_colo_lost_heartbeat(Error **errp)

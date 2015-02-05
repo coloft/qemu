@@ -14,10 +14,15 @@
 #ifndef COLO_NIC_H
 #define COLO_NIC_H
 
+#include "migration/colo.h"
+
 typedef struct COLONicState {
     char nicname[128]; /* forward dev */
     char script[1024]; /* colo script */
     char ifname[128];  /* e.g. tap name */
 } COLONicState;
+
+void colo_add_nic_devices(COLONicState *cns);
+void colo_remove_nic_devices(COLONicState *cns);
 
 #endif

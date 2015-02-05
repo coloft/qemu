@@ -41,6 +41,7 @@
 #include "qemu/error-report.h"
 
 #include "net/tap.h"
+#include "net/colo-nic.h"
 
 #include "net/vhost_net.h"
 
@@ -627,7 +628,8 @@ static void net_init_tap_one(const NetdevTapOptions *tap, NetClientState *peer,
                              const char *model, const char *name,
                              const char *ifname, const char *script,
                              const char *downscript, const char *vhostfdname,
-                             int vnet_hdr, int fd, Error **errp)
+                             int vnet_hdr, int fd, bool setup_colo,
+                             Error **errp)
 {
     Error *err = NULL;
     TAPState *s = net_tap_fd_init(peer, model, name, fd, vnet_hdr);
@@ -773,7 +775,7 @@ int net_init_tap(const NetClientOptions *opts, const char *name,
 
         net_init_tap_one(tap, peer, "tap", name, NULL,
                          script, downscript,
-                         vhostfdname, vnet_hdr, fd, &err);
+                         vhostfdname, vnet_hdr, fd, true, &err);
         if (err) {
             error_propagate(errp, err);
             return -1;
@@ -823,7 +825,7 @@ int net_init_tap(const NetClientOptions *opts, const char *name,
             net_init_tap_one(tap, peer, "tap", name, ifname,
                              script, downscript,
                              tap->has_vhostfds ? vhost_fds[i] : NULL,
-                             vnet_hdr, fd, &err);
+                             vnet_hdr, fd, false, &err);
             if (err) {
                 error_propagate(errp, err);
                 return -1;
@@ -850,7 +852,7 @@ int net_init_tap(const NetClientOptions *opts, const char *name,
 
         net_init_tap_one(tap, peer, "bridge", name, ifname,
                          script, downscript, vhostfdname,
-                         vnet_hdr, fd, &err);
+                         vnet_hdr, fd, false, &err);
         if (err) {
             error_propagate(errp, err);
             close(fd);
@@ -895,7 +897,7 @@ int net_init_tap(const NetClientOptions *opts, const char *name,
             net_init_tap_one(tap, peer, "tap", name, ifname,
                              i >= 1 ? "no" : script,
                              i >= 1 ? "no" : downscript,
-                             vhostfdname, vnet_hdr, fd, &err);
+                             vhostfdname, vnet_hdr, fd, i == 0, &err);
             if (err) {
                 error_propagate(errp, err);
                 close(fd);
