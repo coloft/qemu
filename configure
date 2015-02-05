@@ -2359,7 +2359,25 @@ EOF
     rdma="no"
   fi
 fi
-
+##########################################
+# COLO needs libnfnetlink libraries
+if test "$colo" != "no"; then
+  cat > $TMPC <<EOF
+#include <libnfnetlink/libnfnetlink.h>
+int main(void) { return 0; }
+EOF
+  colo_libs="-lnfnetlink"
+  if compile_prog "" "$colo_libs"; then
+    colo="yes"
+    libs_softmmu="$libs_softmmu $colo_libs"
+  else
+    if test "$colo" = "yes" ; then
+        error_exit "libnfnetlink is required for colo feature." \
+            "Make sure to have the libnfnetlink devel and headers installed."
+    fi
+    colo="no"
+  fi
+fi
 ##########################################
 # VNC TLS/WS detection
 if test "$vnc" = "yes" -a "$vnc_tls" != "no" ; then
@@ -2632,7 +2650,7 @@ EOF
     if compile_prog "$cfl" "$lib" ; then
         :
     else
-        error_exit "$drv check failed" \
+        rror_exit "$drv check failed" \
             "Make sure to have the $drv libs and headers installed."
     fi
 }

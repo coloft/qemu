@@ -10,6 +10,12 @@
  * later.  See the COPYING file in the top-level directory.
  *
  */
+#include <sys/ioctl.h>
+#include <sys/socket.h>
+#include <linux/netlink.h>
+#include <libnfnetlink/libnfnetlink.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
 #include "include/migration/migration.h"
 #include "migration/colo.h"
 #include "net/net.h"
@@ -17,12 +23,62 @@
 #include "qemu/error-report.h"
 #include "net/tap.h"
 
+/* Remove the follow define after proxy is merged into kernel,
+* using #include <libnfnetlink/libnfnetlink.h> instead.
+*/
+#define NFNL_SUBSYS_COLO 12
+
+/* Message Format
+* <---NLMSG_ALIGN(hlen)-----><-------------- NLMSG_ALIGN(len)----------------->
+* +--------------------+- - -+- - - - - - - - - - - - - - +- - - - - - + - - -+
+* |       Header       | Pad |   Netfilter Netlink Header | Attributes | Pad  |
+* |    struct nlmsghdr |     |     struct nfgenmsg        |            |      |
+* +--------------------+- - -+- - - - - - - - - - - - - - + - - - - - -+ - - -+
+*/
+
+enum nfnl_colo_msg_types {
+    NFCOLO_KERNEL_NOTIFY, /* Used by proxy module to notify qemu */
+
+    NFCOLO_DO_CHECKPOINT,
+    NFCOLO_DO_FAILOVER,
+    NFCOLO_PROXY_INIT,
+    NFCOLO_PROXY_RESET,
+
+    NFCOLO_MSG_MAX
+};
+
+enum nfnl_colo_kernel_notify_attributes {
+    NFNL_COLO_KERNEL_NOTIFY_UNSPEC,
+    NFNL_COLO_COMPARE_RESULT,
+    __NFNL_COLO_KERNEL_NOTIFY_MAX
+};
+
+#define NFNL_COLO_KERNEL_NOTIFY_MAX  (__NFNL_COLO_KERNEL_NOTIFY_MAX - 1)
+
+enum nfnl_colo_attributes {
+    NFNL_COLO_UNSPEC,
+    NFNL_COLO_MODE,
+    __NFNL_COLO_MAX
+};
+#define NFNL_COLO_MAX  (__NFNL_COLO_MAX - 1)
+
+struct nfcolo_msg_mode {
+    u_int8_t mode;
+};
+
+struct nfcolo_packet_compare { /* Unused */
+    int32_t different;
+};
+
 typedef struct nic_device {
     COLONicState *cns;
     int (*configure)(COLONicState *cns, bool up, int side, int index);
     QTAILQ_ENTRY(nic_device) next;
     bool is_up;
 } nic_device;
+
+static struct nfnl_handle *nfnlh;
+static struct nfnl_subsys_handle *nfnlssh;
 
 static int launch_colo_script(COLONicState *cns, bool up, int side, int index)
 {
@@ -209,19 +265,123 @@ void colo_remove_nic_devices(COLONicState *cns)
     }
 }
 
+static int colo_proxy_send(enum nfnl_colo_msg_types msg_type,
+                           enum COLOMode mode, int flag, void *unused)
+{
+    struct nfcolo_msg_mode params;
+    union {
+        char buf[NFNL_HEADER_LEN
+                 + NFA_LENGTH(sizeof(struct nfcolo_msg_mode))];
+        struct nlmsghdr nmh;
+    } u;
+    int ret;
+
+    if (!nfnlssh || !nfnlh) {
+        error_report("nfnlssh and nfnlh are uninited");
+        return -1;
+    }
+    nfnl_fill_hdr(nfnlssh, &u.nmh, 0, AF_UNSPEC, 1,
+                  msg_type, NLM_F_REQUEST | flag);
+    params.mode = mode;
+    u.nmh.nlmsg_pid = nfnl_portid(nfnlh);
+    ret = nfnl_addattr_l(&u.nmh, sizeof(u),  NFNL_COLO_MODE, &params,
+                         sizeof(params));
+    if (ret < 0) {
+        error_report("call nfnl_addattr_l failed");
+        return ret;
+    }
+    ret = nfnl_send(nfnlh, &u.nmh);
+    if (ret < 0) {
+        error_report("call nfnl_send failed");
+    }
+    return ret;
+}
+
+static int check_proxy_ack(void)
+{
+    unsigned char *buf = g_malloc0(2048);
+    struct nlmsghdr *nlmsg;
+    int len;
+    int ret = -1;
+
+    len = nfnl_recv(nfnlh, buf, 2048);
+    if (len <= 0) {
+        error_report("nfnl_recv received nothing");
+        goto err;
+    }
+    nlmsg = (struct nlmsghdr *)buf;
+
+    if (nlmsg->nlmsg_type == NLMSG_ERROR) {
+        struct nlmsgerr *err = (struct nlmsgerr *)NLMSG_DATA(nlmsg);
+
+        if (err->error) {
+            error_report("Received error message:%d",  -err->error);
+            goto err;
+        }
+    }
+
+    ret = 0;
+err:
+    g_free(buf);
+    return ret;
+}
+
 int colo_proxy_init(enum COLOMode mode)
 {
     int ret = -1;
 
+    nfnlh = nfnl_open();
+    if (!nfnlh) {
+        error_report("call nfnl_open failed");
+        return -1;
+    }
+    /* Note:
+     *  Here we must ensure that the nl_pid (also nlmsg_pid in nlmsghdr ) equal
+     *  to the process ID of VM, becase we use it to identify the VM in proxy
+     *  module.
+     */
+    if (nfnl_portid(nfnlh) != getpid()) {
+        error_report("More than one netlink of NETLINK_NETFILTER type exist");
+        return -1;
+    }
+    /* disable netlink sequence tracking by default */
+    nfnl_unset_sequence_tracking(nfnlh);
+    nfnlssh = nfnl_subsys_open(nfnlh, NFNL_SUBSYS_COLO, NFCOLO_MSG_MAX, 0);
+    if (!nfnlssh) {
+        error_report("call nfnl_subsys_open failed");
+        goto err_out;
+    }
+
+    /* Netlink is not a reliable protocol, So it is necessary to request proxy
+     * module to acknowledge in the first time.
+     */
+    ret = colo_proxy_send(NFCOLO_PROXY_INIT, mode, NLM_F_ACK, NULL);
+    if (ret < 0) {
+        goto err_out;
+    }
+
+    ret = check_proxy_ack();
+    if (ret < 0) {
+        goto err_out;
+    }
+
     ret = configure_nic(mode, getpid());
     if (ret != 0) {
         error_report("excute colo-proxy-script failed");
+        goto err_out;
     }
 
+    return 0;
+err_out:
+    nfnl_close(nfnlh);
+    nfnlh = NULL;
     return ret;
 }
 
 void colo_proxy_destroy(enum COLOMode mode)
 {
+    if (nfnlh) {
+        nfnl_close(nfnlh);
+    }
     teardown_nic(mode, getpid());
 }
