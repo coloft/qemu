@@ -632,6 +632,7 @@ static void net_init_tap_one(const NetdevTapOptions *tap, NetClientState *peer,
     Error *err = NULL;
     TAPState *s = net_tap_fd_init(peer, model, name, fd, vnet_hdr);
     int vhostfd;
+    NetClientState *nc = &(s->nc);
 
     tap_set_sndbuf(s->fd, tap, &err);
     if (err) {
@@ -654,6 +655,16 @@ static void net_init_tap_one(const NetdevTapOptions *tap, NetClientState *peer,
             snprintf(s->down_script_arg, sizeof(s->down_script_arg),
                      "%s", ifname);
         }
+    }
+
+    snprintf(nc->cns.ifname, sizeof(nc->cns.ifname), "%s", ifname);
+    if (tap->has_colo_script) {
+        snprintf(nc->cns.script, sizeof(nc->cns.script), "%s",
+                 tap->colo_script);
+    }
+    if (tap->has_forward_nic) {
+        snprintf(nc->cns.nicname, sizeof(nc->cns.nicname), "%s",
+                 tap->forward_nic);
     }
 
     if (tap->has_vhost ? tap->vhost :
@@ -774,9 +785,10 @@ int net_init_tap(const NetClientOptions *opts, const char *name,
 
         if (tap->has_ifname || tap->has_script || tap->has_downscript ||
             tap->has_vnet_hdr || tap->has_helper || tap->has_queues ||
-            tap->has_vhostfd) {
+            tap->has_vhostfd || tap->has_colo_script || tap->has_forward_nic) {
             error_setg(errp, "ifname=, script=, downscript=, vnet_hdr=, "
                        "helper=, queues=, and vhostfd= "
+                        "colo_script=, and forward_nic= "
                        "are invalid with fds=");
             return -1;
         }
@@ -819,9 +831,11 @@ int net_init_tap(const NetClientOptions *opts, const char *name,
         }
     } else if (tap->has_helper) {
         if (tap->has_ifname || tap->has_script || tap->has_downscript ||
-            tap->has_vnet_hdr || tap->has_queues || tap->has_vhostfds) {
+            tap->has_vnet_hdr || tap->has_queues || tap->has_vhostfds ||
+            tap->has_colo_script || tap->has_forward_nic) {
             error_setg(errp, "ifname=, script=, downscript=, vnet_hdr=, "
-                       "queues=, and vhostfds= are invalid with helper=");
+                       "queues=, and vhostfds=, colo_script=, and "
+                       "forward_nic= are invalid with helper=");
             return -1;
         }
 
@@ -843,6 +857,12 @@ int net_init_tap(const NetClientOptions *opts, const char *name,
             return -1;
         }
     } else {
+        if (queues > 1 && (tap->has_colo_script || tap->has_forward_nic)) {
+            error_report("queues > 1 is invalid if colo_script or "
+                         "forward_nic is specified");
+            return -1;
+        }
+
         if (tap->has_vhostfds) {
             error_setg(errp, "vhostfds= is invalid if fds= wasn't specified");
             return -1;

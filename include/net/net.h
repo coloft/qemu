@@ -8,6 +8,7 @@
 #include "net/queue.h"
 #include "migration/vmstate.h"
 #include "qapi-types.h"
+#include "net/colo-nic.h"
 
 #define MAX_QUEUE_NUM 1024
 
@@ -88,6 +89,7 @@ struct NetClientState {
     char *model;
     char *name;
     char info_str[256];
+    COLONicState cns;
     unsigned receive_disabled : 1;
     NetClientDestructor *destructor;
     unsigned int queue_index;
