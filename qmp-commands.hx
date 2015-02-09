@@ -3680,6 +3680,7 @@ Query current migration capabilities
          - "compress": Multiple compression threads state (json-bool)
          - "events": Migration state change event state (json-bool)
          - "x-postcopy-ram": postcopy ram state (json-bool)
+         - "x-colo" : COarse-Grain LOck Stepping for Non-stop Service (json-bool)
 
 Arguments:
 
