@@ -19,4 +19,7 @@
 bool colo_supported(void);
 void colo_info_mig_init(void);
 
+void colo_init_checkpointer(MigrationState *s);
+bool migration_in_colo_state(void);
+
 #endif
