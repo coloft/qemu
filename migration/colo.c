@@ -17,6 +17,7 @@
 #include "trace.h"
 #include "qemu/error-report.h"
 #include "qemu/sockets.h"
+#include "migration/failover.h"
 
 /*
  * checkpoint interval: unit ms
