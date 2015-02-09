@@ -15,6 +15,7 @@
 #include "trace.h"
 #include "qemu/error-report.h"
 #include "qemu/sockets.h"
+#include "migration/failover.h"
 
 /* Fix me: Convert to use QAPI */
 typedef enum COLOCommand {

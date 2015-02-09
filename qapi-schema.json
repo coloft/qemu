@@ -666,6 +666,31 @@
             '*tls-port': 'int', '*cert-subject': 'str' } }
 
 ##
+# @COLOMode
+#
+# The colo mode
+#
+# @unknown: unknown mode
+#
+# @primary: master side
+#
+# @secondary: slave side
+#
+# Since: 2.4
+##
+{ 'enum': 'COLOMode',
+  'data': [ 'unknown', 'primary', 'secondary'] }
+
+##
+# @colo-lost-heartbeat
+#
+# Tell qemu that heartbeat is lost, request it to do takeover working.
+#
+# Since: 2.4
+##
+{ 'command': 'colo-lost-heartbeat' }
+
+##
 # @MouseInfo:
 #
 # Information about a mouse device.
