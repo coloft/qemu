@@ -13,6 +13,7 @@
 #include "sysemu/sysemu.h"
 #include "migration/colo.h"
 #include "trace.h"
+#include "qemu/error-report.h"
 
 static QEMUBH *colo_bh;
 
@@ -26,6 +27,13 @@ bool migration_in_colo_state(void)
     MigrationState *s = migrate_get_current();
 
     return (s->state == MIGRATION_STATUS_COLO);
+}
+
+bool migration_incoming_in_colo_state(void)
+{
+    MigrationIncomingState *mis = migration_incoming_get_current();
+
+    return (mis && (mis->state == MIGRATION_STATUS_COLO));
 }
 
 static void *colo_thread(void *opaque)
@@ -73,4 +81,18 @@ void colo_init_checkpointer(MigrationState *s)
 {
     colo_bh = qemu_bh_new(colo_start_checkpointer, s);
     qemu_bh_schedule(colo_bh);
+}
+
+void *colo_process_incoming_checkpoints(void *opaque)
+{
+    MigrationIncomingState *mis = opaque;
+
+    migrate_set_state(&mis->state, MIGRATION_STATUS_ACTIVE,
+                      MIGRATION_STATUS_COLO);
+
+    /* TODO: COLO checkpoint restore loop */
+
+    migration_incoming_exit_colo();
+
+    return NULL;
 }

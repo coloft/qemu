@@ -1473,6 +1473,7 @@ rdma_start_outgoing_migration_after_rdma_source_init(void) ""
 
 # migration/colo.c
 colo_vm_state_change(const char *old, const char *new) "Change '%s' => '%s'"
+colo_receive_message(const char *msg) "Receive '%s'"
 
 # kvm-all.c
 kvm_ioctl(int type, void *arg) "type 0x%x, arg %p"

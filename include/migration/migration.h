@@ -22,6 +22,7 @@
 #include "migration/vmstate.h"
 #include "qapi-types.h"
 #include "exec/cpu-common.h"
+#include "block/coroutine.h"
 
 #define QEMU_VM_FILE_MAGIC           0x5145564d
 #define QEMU_VM_FILE_VERSION_COMPAT  0x00000002
@@ -51,6 +52,12 @@ struct MigrationIncomingState {
     QEMUFile *file;
 
     int state;
+
+    bool have_colo_incoming_thread;
+    QemuThread colo_incoming_thread;
+    /* The coroutine we should enter (back) after failover */
+    Coroutine *migration_incoming_co;
+
     /* See savevm.c */
     LoadStateEntry_Head loadvm_handlers;
 };
