@@ -529,11 +529,14 @@
 # @auto-converge: If enabled, QEMU will automatically throttle down the guest
 #          to speed up convergence of RAM migration. (since 1.6)
 #
+# @colo: If enabled, migration will never end, and the state of VM in primary side
+#        will be migrated continuously to VM in secondary side. (since 2.4)
+#
 # Since: 1.2
 ##
 { 'enum': 'MigrationCapability',
   'data': ['xbzrle', 'rdma-pin-all', 'auto-converge', 'zero-blocks',
-           'compress', 'events'] }
+           'compress', 'events', 'colo'] }
 
 ##
 # @MigrationCapabilityStatus
