@@ -734,6 +734,32 @@
             'checkpoint-reply', 'vmstate-send', 'vmstate-size',
             'vmstate-received', 'vmstate-loaded' ] }
 
+##
+# @COLOMode
+#
+# The colo mode
+#
+# @unknown: unknown mode
+#
+# @primary: master side
+#
+# @secondary: slave side
+#
+# Since: 2.5
+##
+{ 'enum': 'COLOMode',
+  'data': [ 'unknown', 'primary', 'secondary'] }
+
+##
+# @x-colo-lost-heartbeat
+#
+# Tell qemu that heartbeat is lost, request it to do takeover procedures.
+#
+# Since: 2.5
+##
+{ 'command': 'x-colo-lost-heartbeat' }
+
+##
 # @MouseInfo:
 #
 # Information about a mouse device.
