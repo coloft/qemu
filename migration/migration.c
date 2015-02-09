@@ -280,7 +280,28 @@ static void process_incoming_migration_co(void *opaque)
                       MIGRATION_STATUS_ACTIVE);
     ret = qemu_loadvm_state(f);
 
-    qemu_fclose(f);
+    if (!ret) {
+        /* Make sure all file formats flush their mutable metadata */
+        bdrv_invalidate_cache_all(&local_err);
+        if (local_err) {
+            error_report_err(local_err);
+            migrate_decompress_threads_join();
+            exit(EXIT_FAILURE);
+        }
+    }
+    /* we get colo info, and know if we are in colo mode */
+    if (!ret && migration_incoming_enable_colo()) {
+        mis->migration_incoming_co = qemu_coroutine_self();
+        qemu_thread_create(&mis->colo_incoming_thread, "colo incoming",
+             colo_process_incoming_thread, mis, QEMU_THREAD_JOINABLE);
+        mis->have_colo_incoming_thread = true;
+        qemu_coroutine_yield();
+
+        /* Wait checkpoint incoming thread exit before free resource */
+        qemu_thread_join(&mis->colo_incoming_thread);
+    } else {
+        qemu_fclose(f);
+    }
     free_xbzrle_decoded_buf();
     migration_incoming_state_destroy();
 
@@ -295,18 +316,9 @@ static void process_incoming_migration_co(void *opaque)
                       MIGRATION_STATUS_COMPLETED);
     qemu_announce_self();
 
-    /* Make sure all file formats flush their mutable metadata */
-    bdrv_invalidate_cache_all(&local_err);
-    if (local_err) {
-        error_report_err(local_err);
-        migrate_decompress_threads_join();
-        exit(EXIT_FAILURE);
-    }
-
     /* If global state section was not received or we are in running
        state, we need to obey autostart. Any other state is set with
        runstate_set. */
-
     if (!global_state_received() ||
         global_state_get_runstate() == RUN_STATE_RUNNING) {
         if (autostart) {
@@ -740,6 +752,7 @@ void qmp_migrate(const char *uri, bool has_blk, bool blk,
         error_setg(errp, QERR_MIGRATION_ACTIVE);
         return;
     }
+
     if (runstate_check(RUN_STATE_INMIGRATE)) {
         error_setg(errp, "Guest is waiting for an incoming migration");
         return;
