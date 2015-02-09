@@ -89,6 +89,7 @@ int main(int argc, char **argv)
 #include "audio/audio.h"
 #include "migration/migration.h"
 #include "sysemu/cpus.h"
+#include "migration/colo.h"
 #include "sysemu/kvm.h"
 #include "qapi/qmp/qjson.h"
 #include "qemu/option.h"
@@ -4372,6 +4373,8 @@ int main(int argc, char **argv, char **envp)
 #endif
     }
 
+    colo_info_init();
+
     if (net_init_clients() < 0) {
         exit(1);
     }
@@ -4402,7 +4405,6 @@ int main(int argc, char **argv, char **envp)
 
     blk_mig_init();
     ram_mig_init();
-
     /* If the currently selected machine wishes to override the units-per-bus
      * property of its default HBA interface type, do so now. */
     if (machine_class->units_per_default_bus) {
