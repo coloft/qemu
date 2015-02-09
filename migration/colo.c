@@ -11,11 +11,18 @@
  */
 
 #include <unistd.h>
+#include "qemu/timer.h"
 #include "sysemu/sysemu.h"
 #include "migration/colo.h"
 #include "trace.h"
 #include "qemu/error-report.h"
 #include "qemu/sockets.h"
+
+/*
+ * checkpoint interval: unit ms
+ * Note: Please change this default value to 10000 when we support hybrid mode.
+ */
+#define CHECKPOINT_MAX_PEROID 200
 
 static QEMUBH *colo_bh;
 /* colo buffer */
@@ -186,6 +193,7 @@ static void *colo_thread(void *opaque)
 {
     MigrationState *s = opaque;
     QEMUSizedBuffer *buffer = NULL;
+    int64_t current_time, checkpoint_time = qemu_clock_get_ms(QEMU_CLOCK_HOST);
     int fd, ret = 0;
 
     /* Dup the fd of to_dst_file */
@@ -223,11 +231,17 @@ static void *colo_thread(void *opaque)
     trace_colo_vm_state_change("stop", "run");
 
     while (s->state == MIGRATION_STATUS_COLO) {
+        current_time = qemu_clock_get_ms(QEMU_CLOCK_HOST);
+        if (current_time - checkpoint_time < CHECKPOINT_MAX_PEROID) {
+            g_usleep(100000);
+            continue;
+        }
         /* start a colo checkpoint */
         ret = colo_do_checkpoint_transaction(s, buffer);
         if (ret < 0) {
             goto out;
         }
+        checkpoint_time = qemu_clock_get_ms(QEMU_CLOCK_HOST);
     }
 
 out:
