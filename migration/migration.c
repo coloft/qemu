@@ -30,6 +30,7 @@
 #include "qapi/util.h"
 #include "qapi-event.h"
 #include "qom/cpu.h"
+#include "migration/colo.h"
 
 #define MAX_THROTTLE  (32 << 20)      /* Migration transfer speed throttling */
 
@@ -364,6 +365,9 @@ MigrationCapabilityStatusList *qmp_query_migrate_capabilities(Error **errp)
 
     caps = NULL; /* silence compiler warning */
     for (i = 0; i < MIGRATION_CAPABILITY_MAX; i++) {
+        if (i == MIGRATION_CAPABILITY_X_COLO && !colo_supported()) {
+            continue;
+        }
         if (head == NULL) {
             head = g_malloc0(sizeof(*caps));
             caps = head;
@@ -513,6 +517,13 @@ void qmp_migrate_set_capabilities(MigrationCapabilityStatusList *params,
     }
 
     for (cap = params; cap; cap = cap->next) {
+        if (cap->value->capability == MIGRATION_CAPABILITY_X_COLO &&
+            !colo_supported()) {
+            error_setg(errp, "COLO is not currently supported, please"
+                             " configure with --enable-colo option in order to"
+                             " support COLO feature");
+            continue;
+        }
         s->enabled_capabilities[cap->value->capability] = cap->value->state;
     }
 }
@@ -1016,6 +1027,12 @@ static void migration_completion(MigrationState *s, bool *old_vm_running,
 
 fail:
     migrate_set_state(s, MIGRATION_STATUS_ACTIVE, MIGRATION_STATUS_FAILED);
+}
+
+bool migrate_colo_enabled(void)
+{
+    MigrationState *s = migrate_get_current();
+    return s->enabled_capabilities[MIGRATION_CAPABILITY_X_COLO];
 }
 
 /* migration thread support */
