@@ -3489,6 +3489,7 @@ Query current migration capabilities
          - "rdma-pin-all" : RDMA Pin Page state (json-bool)
          - "auto-converge" : Auto Converge state (json-bool)
          - "zero-blocks" : Zero Blocks state (json-bool)
+         - "colo" : COarse-Grain LOck Stepping for Non-stop Service (json-bool)
 
 Arguments:
 
