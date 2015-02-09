@@ -11,6 +11,7 @@
  */
 
 #include "migration/colo.h"
+#include "qmp-commands.h"
 
 bool colo_supported(void)
 {
@@ -34,4 +35,11 @@ void colo_init_checkpointer(MigrationState *s)
 void *colo_process_incoming_thread(void *opaque)
 {
     return NULL;
+}
+
+void qmp_colo_lost_heartbeat(Error **errp)
+{
+    error_setg(errp, "COLO is not supported, please rerun configure"
+                     " with --enable-colo option in order to support"
+                     " COLO feature");
 }

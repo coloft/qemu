@@ -1050,6 +1050,21 @@ Set the parameter @var{parameter} for migration.
 ETEXI
 
     {
+        .name       = "colo_lost_heartbeat",
+        .args_type  = "",
+        .params     = "",
+        .help       = "Tell COLO that heartbeat is lost,\n\t\t\t"
+                      "a failover or takeover is needed.",
+        .mhandler.cmd = hmp_colo_lost_heartbeat,
+    },
+
+STEXI
+@item colo_lost_heartbeat
+@findex colo_lost_heartbeat
+Tell COLO that heartbeat is lost, a failover or takeover is needed.
+ETEXI
+
+    {
         .name       = "client_migrate_info",
         .args_type  = "protocol:s,hostname:s,port:i?,tls-port:i?,cert-subject:s?",
         .params     = "protocol hostname port tls-port cert-subject",
