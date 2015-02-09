@@ -439,6 +439,10 @@ MigrationInfo *qmp_query_migrate(Error **errp)
 
         get_xbzrle_cache_stats(info);
         break;
+    case MIGRATION_STATUS_COLO:
+        info->has_status = true;
+        /* TODO: display COLO specific information (checkpoint info etc.) */
+        break;
     case MIGRATION_STATUS_COMPLETED:
         get_xbzrle_cache_stats(info);
 
@@ -724,7 +728,8 @@ void qmp_migrate(const char *uri, bool has_blk, bool blk,
 
     if (s->state == MIGRATION_STATUS_ACTIVE ||
         s->state == MIGRATION_STATUS_SETUP ||
-        s->state == MIGRATION_STATUS_CANCELLING) {
+        s->state == MIGRATION_STATUS_CANCELLING ||
+        s->state == MIGRATION_STATUS_COLO) {
         error_setg(errp, QERR_MIGRATION_ACTIVE);
         return;
     }
@@ -941,6 +946,7 @@ static void *migration_thread(void *opaque)
     int64_t max_size = 0;
     int64_t start_time = initial_time;
     bool old_vm_running = false;
+    bool enable_colo = migrate_enable_colo();
 
     rcu_register_thread();
 
@@ -985,8 +991,10 @@ static void *migration_thread(void *opaque)
                 }
 
                 if (!qemu_file_get_error(s->file)) {
-                    migrate_set_state(&s->state, MIGRATION_STATUS_ACTIVE,
-                                      MIGRATION_STATUS_COMPLETED);
+                    if (!enable_colo) {
+                        migrate_set_state(&s->state, MIGRATION_STATUS_ACTIVE,
+                                          MIGRATION_STATUS_COMPLETED);
+                    }
                     break;
                 }
             }
@@ -1037,11 +1045,16 @@ static void *migration_thread(void *opaque)
         }
         runstate_set(RUN_STATE_POSTMIGRATE);
     } else {
-        if (old_vm_running) {
+        if (s->state == MIGRATION_STATUS_ACTIVE && enable_colo) {
+            colo_init_checkpointer(s);
+        } else if (old_vm_running) {
             vm_start();
         }
     }
-    qemu_bh_schedule(s->cleanup_bh);
+
+    if (!enable_colo) {
+        qemu_bh_schedule(s->cleanup_bh);
+    }
     qemu_mutex_unlock_iothread();
 
     rcu_unregister_thread();

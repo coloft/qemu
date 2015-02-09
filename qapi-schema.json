@@ -433,7 +433,7 @@
 ##
 { 'enum': 'MigrationStatus',
   'data': [ 'none', 'setup', 'cancelling', 'cancelled',
-            'active', 'completed', 'failed' ] }
+            'active', 'completed', 'failed', 'colo' ] }
 
 ##
 # @MigrationInfo
