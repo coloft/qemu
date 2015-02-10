@@ -600,6 +600,7 @@ void *colo_process_incoming_thread(void *opaque)
     uint64_t total_size;
     uint64_t value;
     Error *local_err = NULL;
+    int ret;
 
     qemu_sem_init(&mis->colo_incoming_sem, 0);
 
@@ -620,6 +621,12 @@ void *colo_process_incoming_thread(void *opaque)
      * set the fd back to blocked.
      */
     qemu_file_set_blocking(mis->from_src_file, true);
+
+    ret = colo_init_ram_cache();
+    if (ret < 0) {
+        error_report("Failed to initialize ram cache");
+        goto out;
+    }
 
     bioc = qio_channel_buffer_new(COLO_BUFFER_BASE_SIZE);
     fb = qemu_fopen_channel_input(QIO_CHANNEL(bioc));
@@ -754,11 +761,18 @@ out:
     if (fb) {
         qemu_fclose(fb);
     }
+    /*
+     * We can ensure BH is hold the global lock, and will join COLO
+     * incoming thread, so here it is not necessary to lock here again,
+     * Or there will be a deadlock error.
+     */
+    colo_release_ram_cache();
 
     /* Hope this not to be too long to loop here */
     qemu_sem_wait(&mis->colo_incoming_sem);
     qemu_sem_destroy(&mis->colo_incoming_sem);
     /* Must be called after failover BH is completed */
+
     if (mis->to_src_file) {
         qemu_fclose(mis->to_src_file);
     }
