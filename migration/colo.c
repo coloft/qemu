@@ -88,6 +88,95 @@ bool migration_incoming_in_colo_state(void)
     return (mis && (mis->state == MIGRATION_STATUS_COLO));
 }
 
+static bool colo_runstate_is_stopped(void)
+{
+    return runstate_check(RUN_STATE_COLO) || !runstate_is_running();
+}
+
+/*
+ * there are two way to entry this function
+ * 1. From colo checkpoint incoming thread, in this case
+ * we should protect it by iothread lock
+ * 2. From user command, because hmp/qmp command
+ * was happened in main loop, iothread lock will cause a
+ * dead lock.
+ */
+static void secondary_vm_do_failover(void)
+{
+    int old_state;
+    MigrationIncomingState *mis = migration_incoming_get_current();
+
+    migrate_set_state(&mis->state, MIGRATION_STATUS_COLO,
+                      MIGRATION_STATUS_COMPLETED);
+
+    if (!autostart) {
+        error_report("\"-S\" qemu option will be ignored in secondary side");
+        /* recover runstate to normal migration finish state */
+        autostart = true;
+    }
+    if (mis->file) { /* Make sure colo incoming thread not block in recv */
+        qemu_file_shutdown(mis->file);
+    }
+    if (mis->colo_buffer) {
+        qsb_free(mis->colo_buffer);
+    }
+    old_state = failover_set_state(FAILOVER_STATUS_HANDLING,
+                                   FAILOVER_STATUS_COMPLETED);
+    if (old_state != FAILOVER_STATUS_HANDLING) {
+        error_report("Serious error while do failover for secondary VM,"
+                     "old_state: %d", old_state);
+        return;
+    }
+    /* For Secondary VM, jump to incoming co */
+    if (mis->migration_incoming_co) {
+        qemu_coroutine_enter(mis->migration_incoming_co, NULL);
+    }
+}
+
+static void primary_vm_do_failover(void)
+{
+    MigrationState *s = migrate_get_current();
+    int old_state;
+
+    if (s->state != MIGRATION_STATUS_FAILED) {
+        migrate_set_state(&s->state, MIGRATION_STATUS_COLO,
+                          MIGRATION_STATUS_COMPLETED);
+    }
+
+    if (s->file) { /* Make sure colo thread no block in recv */
+        qemu_file_shutdown(s->file);
+    }
+    if (s->colo_state.buffer) {
+        qsb_free(s->colo_state.buffer);
+        s->colo_state.buffer = NULL;
+    }
+    qemu_bh_schedule(s->cleanup_bh);
+
+    vm_start();
+
+    old_state = failover_set_state(FAILOVER_STATUS_HANDLING,
+                                   FAILOVER_STATUS_COMPLETED);
+    if (old_state != FAILOVER_STATUS_COMPLETED) {
+        error_report("Serious error while do failover for Primary VM,"
+                     "old_state: %d", old_state);
+        return;
+    }
+}
+
+void colo_do_failover(MigrationState *s)
+{
+    /* Make sure vm stopped while failover */
+    if (!colo_runstate_is_stopped()) {
+        vm_stop_force_state(RUN_STATE_COLO);
+    }
+
+    if (get_colo_mode() == COLO_MODE_SECONDARY) {
+        secondary_vm_do_failover();
+    } else {
+        primary_vm_do_failover();
+    }
+}
+
 /* colo checkpoint control helper */
 static int colo_ctl_put(QEMUFile *f, uint64_t request)
 {
@@ -162,11 +251,23 @@ static int colo_do_checkpoint_transaction(MigrationState *s, QEMUFile *control)
         goto out;
     }
 
+    if (failover_request_is_active()) {
+        ret = -1;
+        goto out;
+    }
     /* suspend and save vm state to colo buffer */
     qemu_mutex_lock_iothread();
     vm_stop_force_state(RUN_STATE_COLO);
     qemu_mutex_unlock_iothread();
     trace_colo_vm_state_change("run", "stop");
+    /*
+     * failover request bh could be called after
+     * vm_stop_force_state so we check failover_request_is_active() again.
+     */
+    if (failover_request_is_active()) {
+        ret = -1;
+        goto out;
+    }
 
     /* Disable block migration */
     s->params.blk = 0;
@@ -225,7 +326,7 @@ static void *colo_thread(void *opaque)
 {
     MigrationState *s = opaque;
     QEMUFile *colo_control = NULL;
-    int ret;
+    int i, ret;
 
     failover_init_state();
 
@@ -256,6 +357,11 @@ static void *colo_thread(void *opaque)
     trace_colo_vm_state_change("stop", "run");
 
     while (s->state == MIGRATION_STATUS_COLO) {
+        if (failover_request_is_active()) {
+            error_report("failover request");
+            goto out;
+        }
+
         /* start a colo checkpoint */
         if (colo_do_checkpoint_transaction(s, colo_control)) {
             goto out;
@@ -263,18 +369,24 @@ static void *colo_thread(void *opaque)
     }
 
 out:
-    migrate_set_state(&s->state, MIGRATION_STATUS_COLO,
-                      MIGRATION_STATUS_COMPLETED);
-
-    qsb_free(s->colo_state.buffer);
-    s->colo_state.buffer = NULL;
-
+    error_report("colo: some error happens in colo_thread");
     if (colo_control) {
         qemu_fclose(colo_control);
     }
 
+    /* Give users time (2s) to get involved in this verdict */
+    for (i = 0; i < 10; i++) {
+        if (failover_request_is_active()) {
+            error_report("Primary VM will take over work");
+            break;
+        }
+        usleep(200 * 1000);
+    }
     qemu_mutex_lock_iothread();
-    qemu_bh_schedule(s->cleanup_bh);
+    if (!failover_request_is_active()) {
+        error_report("Primary VM will take over work in default");
+        failover_request_active(NULL);
+    }
     qemu_mutex_unlock_iothread();
 
     return NULL;
@@ -337,7 +449,7 @@ void *colo_process_incoming_checkpoints(void *opaque)
     int fd = qemu_get_fd(f);
     QEMUFile *ctl = NULL, *fb = NULL;
     uint64_t total_size;
-    int ret;
+    int i, ret;
 
     migrate_set_state(&mis->state, MIGRATION_STATUS_ACTIVE,
                       MIGRATION_STATUS_COLO);
@@ -381,6 +493,11 @@ void *colo_process_incoming_checkpoints(void *opaque)
             if (!request) {
                 continue;
             }
+        }
+
+        if (failover_request_is_active()) {
+            error_report("failover request");
+            goto out;
         }
 
         /* suspend guest */
@@ -449,6 +566,8 @@ void *colo_process_incoming_checkpoints(void *opaque)
     }
 
 out:
+    error_report("Detect some error or get a failover request");
+
     qemu_mutex_lock_iothread();
     release_ram_cache();
     qemu_mutex_unlock_iothread();
@@ -460,9 +579,24 @@ out:
         qemu_fclose(ctl);
     }
 
-    qsb_free(mis->colo_buffer);
+    /* Give users time (2s) to get involved in this verdict */
+    for (i = 0; i < 10; i++) {
+        if (failover_request_is_active()) {
+            error_report("Secondary VM will take over work");
+            break;
+        }
+        usleep(200*1000);
+    }
+    /* check flag again*/
+    if (!failover_request_is_active()) {
+        /*
+        * We assume that Primary VM is still alive according to heartbeat,
+        * just kill Secondary VM
+        */
+        error_report("SVM is going to exit in default!");
+        exit(1);
+    }
 
     migration_incoming_exit_colo();
-
     return NULL;
 }

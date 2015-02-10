@@ -22,9 +22,17 @@ static COLOFailoverStatus failover_state;
 
 static void colo_failover_bh(void *opaque)
 {
+    int old_state;
+
     qemu_bh_delete(failover_bh);
     failover_bh = NULL;
-    /*TODO: Do failover work */
+    old_state = failover_set_state(FAILOVER_STATUS_REQUEST,
+                                   FAILOVER_STATUS_HANDLING);
+    if (old_state != FAILOVER_STATUS_REQUEST) {
+        error_report(" Unkown error for failover, old_state=%d", old_state);
+        return;
+    }
+    colo_do_failover(NULL);
 }
 
 void failover_request_active(Error **errp)
@@ -57,6 +65,11 @@ int failover_set_state(int old_state, int new_state)
 int failover_get_state(void)
 {
     return atomic_read(&failover_state);
+}
+
+bool failover_request_is_active(void)
+{
+    return ((failover_get_state() != FAILOVER_STATUS_NONE));
 }
 
 void qmp_colo_lost_heartbeat(Error **errp)
