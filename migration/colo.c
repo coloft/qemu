@@ -69,6 +69,7 @@ typedef enum COLOCommand {
     COLO_CHECKPOINT_SEND,
     COLO_CHECKPOINT_RECEIVED,
     COLO_CHECKPOINT_LOADED,
+    COLO_GUEST_SHUTDOWN,
 
     COLO_CHECKPOINT_MAX
 } COLOCommand;
@@ -80,6 +81,7 @@ const char * const COLOCommand_lookup[] = {
     [COLO_CHECKPOINT_SEND] = "checheckpoint-send",
     [COLO_CHECKPOINT_RECEIVED] = "checkpoint-received",
     [COLO_CHECKPOINT_LOADED] = "checkpoint-loaded",
+    [COLO_GUEST_SHUTDOWN] = "guest-shutdown",
     [COLO_CHECKPOINT_MAX] = NULL,
 };
 
@@ -277,7 +279,7 @@ static int colo_ctl_get(QEMUFile *f, uint64_t require)
 
 static int colo_do_checkpoint_transaction(MigrationState *s, QEMUFile *control)
 {
-    int ret;
+    int colo_shutdown, ret;
     size_t size;
     QEMUFile *trans = NULL;
 
@@ -304,6 +306,7 @@ static int colo_do_checkpoint_transaction(MigrationState *s, QEMUFile *control)
     }
     /* suspend and save vm state to colo buffer */
     qemu_mutex_lock_iothread();
+    colo_shutdown = colo_shutdown_requested;
     vm_stop_force_state(RUN_STATE_COLO);
     qemu_mutex_unlock_iothread();
     trace_colo_vm_state_change("run", "stop");
@@ -319,6 +322,7 @@ static int colo_do_checkpoint_transaction(MigrationState *s, QEMUFile *control)
     /* Disable block migration */
     s->params.blk = 0;
     s->params.shared = 0;
+    qemu_savevm_state_header(trans);
     qemu_savevm_state_begin(trans, &s->params);
     qemu_mutex_lock_iothread();
     qemu_savevm_state_complete(trans);
@@ -357,6 +361,15 @@ static int colo_do_checkpoint_transaction(MigrationState *s, QEMUFile *control)
     ret = colo_ctl_get(control, COLO_CHECKPOINT_LOADED);
     if (ret < 0) {
         goto out;
+    }
+
+    if (colo_shutdown) {
+        colo_ctl_put(s->file, COLO_GUEST_SHUTDOWN);
+        qemu_fflush(s->file);
+        colo_shutdown_requested = 0;
+        qemu_system_shutdown_request_core();
+        /* Fix me: Just let the colo thread exit ? */
+        qemu_thread_exit(0);
     }
 
     ret = 0;
@@ -419,6 +432,10 @@ static void *colo_thread(void *opaque)
         if (failover_request_is_active()) {
             error_report("failover request");
             goto out;
+        }
+
+        if (colo_shutdown_requested) {
+            goto do_checkpoint;
         }
         /* wait for a colo checkpoint */
         proxy_checkpoint_req = colo_proxy_compare();
@@ -524,6 +541,15 @@ static int colo_wait_handle_cmd(QEMUFile *f, int *checkpoint_request)
     case COLO_CHECKPOINT_NEW:
         *checkpoint_request = 1;
         return 0;
+    case COLO_GUEST_SHUTDOWN:
+        qemu_mutex_lock_iothread();
+        vm_stop_force_state(RUN_STATE_COLO);
+        qemu_system_shutdown_request_core();
+        qemu_mutex_unlock_iothread();
+        /* the main thread will exit and termiante the whole
+        * process, do we need some cleanup?
+        */
+        qemu_thread_exit(0);
     default:
         return -1;
     }
