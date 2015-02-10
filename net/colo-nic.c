@@ -428,6 +428,29 @@ void colo_proxy_destroy(enum COLOMode mode)
     teardown_nic(mode, getpid());
 }
 
+/*
+* Note: Weird, Only the VM in slave side need to do failover work !!!
+*/
+int colo_proxy_failover(void)
+{
+    if (colo_proxy_send(NFCOLO_DO_FAILOVER, COLO_MODE_SECONDARY, 0, NULL) < 0) {
+        return -1;
+    }
+
+    return 0;
+}
+
+/*
+* Note: Only the VM in master side need to do checkpoint
+*/
+int colo_proxy_checkpoint(enum COLOMode  mode)
+{
+    if (colo_proxy_send(NFCOLO_DO_CHECKPOINT, mode, 0, NULL) < 0) {
+        return -1;
+    }
+    return 0;
+}
+
 int colo_proxy_compare(void)
 {
     return atomic_xchg(&packet_compare_different, 0);

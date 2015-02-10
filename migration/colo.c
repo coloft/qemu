@@ -149,6 +149,11 @@ static void secondary_vm_do_failover(void)
     migrate_set_state(&mis->state, MIGRATION_STATUS_COLO,
                       MIGRATION_STATUS_COMPLETED);
 
+    if (colo_proxy_failover() != 0) {
+        error_report("colo proxy failed to do failover");
+    }
+    colo_proxy_destroy(COLO_MODE_SECONDARY);
+
     if (!autostart) {
         error_report("\"-S\" qemu option will be ignored in secondary side");
         /* recover runstate to normal migration finish state */
@@ -177,6 +182,8 @@ static void primary_vm_do_failover(void)
 {
     MigrationState *s = migrate_get_current();
     int old_state;
+
+    colo_proxy_destroy(COLO_MODE_PRIMARY);
 
     if (s->state != MIGRATION_STATUS_FAILED) {
         migrate_set_state(&s->state, MIGRATION_STATUS_COLO,
@@ -318,6 +325,11 @@ static int colo_do_checkpoint_transaction(MigrationState *s, QEMUFile *control)
     qemu_mutex_unlock_iothread();
 
     qemu_fflush(trans);
+
+    ret = colo_proxy_checkpoint(COLO_MODE_PRIMARY);
+    if (ret < 0) {
+        goto out;
+    }
 
     ret = colo_ctl_put(s->file, COLO_CHECKPOINT_SEND);
     if (ret < 0) {
@@ -464,8 +476,6 @@ out:
     }
     qemu_mutex_unlock_iothread();
 
-    colo_proxy_destroy(COLO_MODE_PRIMARY);
-
     return NULL;
 }
 
@@ -593,6 +603,11 @@ void *colo_process_incoming_checkpoints(void *opaque)
             goto out;
         }
 
+        ret = colo_proxy_checkpoint(COLO_MODE_SECONDARY);
+        if (ret < 0) {
+            goto out;
+        }
+
         ret = colo_ctl_get(f, COLO_CHECKPOINT_SEND);
         if (ret < 0) {
             goto out;
@@ -691,10 +706,10 @@ out:
         * just kill Secondary VM
         */
         error_report("SVM is going to exit in default!");
+        colo_proxy_destroy(COLO_MODE_SECONDARY);
         exit(1);
     }
 
-    colo_proxy_destroy(COLO_MODE_SECONDARY);
     migration_incoming_exit_colo();
 
     return NULL;

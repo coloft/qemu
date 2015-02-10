@@ -31,5 +31,7 @@ int colo_proxy_init(enum COLOMode mode);
 void colo_proxy_destroy(enum COLOMode mode);
 
 int colo_proxy_compare(void);
+int colo_proxy_failover(void);
+int colo_proxy_checkpoint(enum COLOMode mode);
 
 #endif
