@@ -1489,6 +1489,7 @@ colo_vm_state_change(const char *old, const char *new) "Change '%s' => '%s'"
 colo_ctl_put(const char *msg) "Send '%s'"
 colo_ctl_get(const char *msg) "Receive '%s'"
 colo_failover_set_state(int new_state) "new state %d"
+colo_rcv_pkt(int result) "Result of net packets comparing is different: %d"
 
 # kvm-all.c
 kvm_ioctl(int type, void *arg) "type 0x%x, arg %p"

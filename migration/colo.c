@@ -75,6 +75,13 @@ static void secondary_vm_do_failover(void)
         /* recover runstate to normal migration finish state */
         autostart = true;
     }
+    /* Make sure colo incoming thread not block in recv */
+    if (mis->from_src_file) {
+        qemu_file_shutdown(mis->from_src_file);
+    }
+    if (mis->to_src_file) {
+        qemu_file_shutdown(mis->to_src_file);
+    }
 
     old_state = failover_set_state(FAILOVER_STATUS_HANDLING,
                                    FAILOVER_STATUS_COMPLETED);
@@ -98,6 +105,14 @@ static void primary_vm_do_failover(void)
         migrate_set_state(&s->state, MIGRATION_STATUS_COLO,
                           MIGRATION_STATUS_COMPLETED);
     }
+
+    if (s->from_dst_file) { /* Make sure colo thread no block in recv */
+        qemu_file_shutdown(s->from_dst_file);
+    }
+    if (s->to_dst_file) {
+        qemu_file_shutdown(s->to_dst_file);
+    }
+
     qemu_bh_schedule(s->cleanup_bh);
 
     vm_start();
@@ -207,7 +222,6 @@ static int colo_do_checkpoint_transaction(MigrationState *s,
         goto out;
     }
 
-    /* suspend and save vm state to colo buffer */
     qemu_mutex_lock_iothread();
     if (failover_request_is_active()) {
         qemu_mutex_unlock_iothread();
@@ -345,7 +359,7 @@ static void *colo_thread(void *opaque)
 
 out:
     current_time = error_time = qemu_clock_get_ms(QEMU_CLOCK_HOST);
-    if (ret < 0) {
+    if (ret < 0 || (!ret && !failover_request_is_active())) {
         error_report("Detect some error: %s", strerror(-ret));
         qapi_event_send_colo_exit(COLO_MODE_PRIMARY, COLO_EXIT_REASON_ERROR,
                                   true, strerror(-ret), NULL);
@@ -373,6 +387,15 @@ out:
 
     qsb_free(buffer);
     buffer = NULL;
+
+    /* Hope this not to be too long to loop here */
+    while (failover_get_state() != FAILOVER_STATUS_COMPLETED) {
+        ;
+    }
+    /* Must be called after failover BH is completed */
+   if (s->from_dst_file) {
+        qemu_fclose(s->from_dst_file);
+    }
 
     return NULL;
 }
@@ -551,7 +574,7 @@ void *colo_process_incoming_thread(void *opaque)
 
 out:
     current_time = error_time = qemu_clock_get_ms(QEMU_CLOCK_HOST);
-    if (ret < 0) {
+    if (ret < 0 || (!ret && !failover_request_is_active())) {
         error_report("colo incoming thread will exit, detect error: %s",
                      strerror(-ret));
         qapi_event_send_colo_exit(COLO_MODE_SECONDARY, COLO_EXIT_REASON_ERROR,
@@ -590,11 +613,15 @@ out:
     */
     colo_release_ram_cache();
 
+    /* Hope this not to be too long to loop here */
+    while (failover_get_state() != FAILOVER_STATUS_COMPLETED) {
+        ;
+    }
+    /* Must be called after failover BH is completed */
     if (mis->to_src_file) {
         qemu_fclose(mis->to_src_file);
     }
 
     migration_incoming_exit_colo();
-
     return NULL;
 }
