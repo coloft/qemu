@@ -332,7 +332,8 @@ void *colo_process_incoming_checkpoints(void *opaque)
     MigrationIncomingState *mis = opaque;
     QEMUFile *f = mis->file;
     int fd = qemu_get_fd(f);
-    QEMUFile *ctl = NULL;
+    QEMUFile *ctl = NULL, *fb = NULL;
+    uint64_t total_size;
     int ret;
 
     migrate_set_state(&mis->state, MIGRATION_STATUS_ACTIVE,
@@ -346,6 +347,12 @@ void *colo_process_incoming_checkpoints(void *opaque)
 
     if (create_and_init_ram_cache() < 0) {
         error_report("Failed to initialize ram cache");
+        goto out;
+    }
+
+    mis->colo_buffer = qsb_create(NULL, COLO_BUFFER_BASE_SIZE);
+    if (mis->colo_buffer == NULL) {
+        error_report("Failed to allocate colo buffer!");
         goto out;
     }
 
@@ -388,12 +395,39 @@ void *colo_process_incoming_checkpoints(void *opaque)
             goto out;
         }
 
-        /*TODO Load VM state */
+        /* read the VM state total size first */
+        ret = colo_ctl_get_value(f, &total_size);
+        if (ret < 0) {
+            goto out;
+        }
+
+        /* read vm device state into colo buffer */
+        ret = qsb_fill_buffer(mis->colo_buffer, f, total_size);
+        if (ret != total_size) {
+            error_report("can't get all migration data");
+            goto out;
+        }
 
         ret = colo_ctl_put(ctl, COLO_CHECKPOINT_RECEIVED);
         if (ret < 0) {
             goto out;
         }
+
+        /* open colo buffer for read */
+        fb = qemu_bufopen("r", mis->colo_buffer);
+        if (!fb) {
+            error_report("can't open colo buffer for read");
+            goto out;
+        }
+
+        qemu_mutex_lock_iothread();
+        qemu_system_reset(VMRESET_SILENT);
+        if (qemu_loadvm_state(fb) < 0) {
+            error_report("COLO: loadvm failed");
+            qemu_mutex_unlock_iothread();
+            goto out;
+        }
+        qemu_mutex_unlock_iothread();
 
         /* TODO: flush vm state */
 
@@ -407,15 +441,25 @@ void *colo_process_incoming_checkpoints(void *opaque)
         vm_start();
         qemu_mutex_unlock_iothread();
         trace_colo_vm_state_change("stop", "start");
-}
+
+        qemu_fclose(fb);
+        fb = NULL;
+    }
 
 out:
     qemu_mutex_lock_iothread();
     release_ram_cache();
     qemu_mutex_unlock_iothread();
+
+    if (fb) {
+        qemu_fclose(fb);
+    }
     if (ctl) {
         qemu_fclose(ctl);
     }
+
+    qsb_free(mis->colo_buffer);
+
     migration_incoming_exit_colo();
 
     return NULL;

@@ -57,6 +57,7 @@ struct MigrationIncomingState {
     QemuThread colo_incoming_thread;
     /* The coroutine we should enter (back) after failover */
     Coroutine *migration_incoming_co;
+    QEMUSizedBuffer *colo_buffer; /* Cache incoming device state */
 
     /* See savevm.c */
     LoadStateEntry_Head loadvm_handlers;
