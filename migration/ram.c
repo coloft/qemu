@@ -225,6 +225,7 @@ static ram_addr_t last_offset;
 static unsigned long *migration_bitmap;
 static QemuMutex migration_bitmap_mutex;
 static uint64_t migration_dirty_pages;
+static bool ram_cache_enable;
 static uint32_t last_version;
 static bool ram_bulk_stage;
 
@@ -1353,6 +1354,8 @@ static int load_xbzrle(QEMUFile *f, ram_addr_t addr, void *host)
     return 0;
 }
 
+static void *memory_region_get_ram_cache_ptr(MemoryRegion *mr, RAMBlock *block);
+
 /* Must be called from within a rcu critical section.
  * Returns a pointer from within the RCU-protected ram_list.
  */
@@ -1370,7 +1373,20 @@ static inline void *host_from_stream_offset(QEMUFile *f,
             return NULL;
         }
 
-        return memory_region_get_ram_ptr(block->mr) + offset;
+        if (ram_cache_enable) {
+            /*
+            * During colo checkpoint, we need bitmap of these migrated pages.
+            * It help us to decide which pages in ram cache should be flushed
+            * into VM's RAM later.
+            */
+            long k = (block->mr->ram_addr + offset) >> TARGET_PAGE_BITS;
+            if (!test_and_set_bit(k, migration_bitmap)) {
+                migration_dirty_pages++;
+            }
+            return memory_region_get_ram_cache_ptr(block->mr, block) + offset;
+        } else {
+            return memory_region_get_ram_ptr(block->mr) + offset;
+        }
     }
 
     len = qemu_get_byte(f);
@@ -1380,7 +1396,16 @@ static inline void *host_from_stream_offset(QEMUFile *f,
     QLIST_FOREACH_RCU(block, &ram_list.blocks, next) {
         if (!strncmp(id, block->idstr, sizeof(id)) &&
             block->max_length > offset) {
-            return memory_region_get_ram_ptr(block->mr) + offset;
+            if (ram_cache_enable) {
+                long k = (block->mr->ram_addr + offset) >> TARGET_PAGE_BITS;
+                if (!test_and_set_bit(k, migration_bitmap)) {
+                    migration_dirty_pages++;
+                }
+                return memory_region_get_ram_cache_ptr(block->mr, block)
+                       + offset;
+            } else {
+                return memory_region_get_ram_ptr(block->mr) + offset;
+            }
         }
     }
 
@@ -1629,6 +1654,70 @@ static int ram_load(QEMUFile *f, void *opaque, int version_id)
     DPRINTF("Completed load of VM with exit code %d seq iteration "
             "%" PRIu64 "\n", ret, seq_iter);
     return ret;
+}
+
+/*
+ * colo cache: this is for secondary VM, we cache the whole
+ * memory of the secondary VM, it will be called after first migration.
+ */
+int create_and_init_ram_cache(void)
+{
+    RAMBlock *block;
+
+    rcu_read_lock();
+    QLIST_FOREACH_RCU(block, &ram_list.blocks, next) {
+        block->host_cache = qemu_anon_ram_alloc(block->used_length, NULL);
+        if (!block->host_cache) {
+            goto out_locked;
+        }
+        memcpy(block->host_cache, block->host, block->used_length);
+    }
+    rcu_read_unlock();
+    ram_cache_enable = true;
+    return 0;
+
+out_locked:
+    QLIST_FOREACH_RCU(block, &ram_list.blocks, next) {
+        if (block->host_cache) {
+            qemu_anon_ram_free(block->host_cache, block->used_length);
+            block->host_cache = NULL;
+        }
+    }
+
+    rcu_read_unlock();
+    return -1;
+}
+
+void release_ram_cache(void)
+{
+    RAMBlock *block;
+
+    ram_cache_enable = false;
+
+    rcu_read_lock();
+    QLIST_FOREACH_RCU(block, &ram_list.blocks, next) {
+        if (block->host_cache) {
+            qemu_anon_ram_free(block->host_cache, block->used_length);
+            block->host_cache = NULL;
+        }
+    }
+    rcu_read_unlock();
+}
+
+static void *memory_region_get_ram_cache_ptr(MemoryRegion *mr, RAMBlock *block)
+{
+   if (mr->alias) {
+        return memory_region_get_ram_cache_ptr(mr->alias, block) +
+               mr->alias_offset;
+    }
+
+    assert(mr->terminates);
+
+    ram_addr_t addr = mr->ram_addr & TARGET_PAGE_MASK;
+
+    assert(addr - block->offset < block->used_length);
+
+    return block->host_cache + (addr - block->offset);
 }
 
 static SaveVMHandlers savevm_ram_handlers = {

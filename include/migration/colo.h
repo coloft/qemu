@@ -30,4 +30,7 @@ bool migration_incoming_enable_colo(void);
 void migration_incoming_exit_colo(void);
 void *colo_process_incoming_checkpoints(void *opaque);
 bool migration_incoming_in_colo_state(void);
+/* ram cache */
+int create_and_init_ram_cache(void);
+void release_ram_cache(void);
 #endif
