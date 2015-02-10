@@ -304,6 +304,12 @@ void *colo_process_incoming_thread(void *opaque)
         goto out;
     }
 
+    ret = colo_init_ram_cache();
+    if (ret < 0) {
+        error_report("Failed to initialize ram cache");
+        goto out;
+    }
+
     ret = colo_ctl_put(mis->to_src_file, COLO_COMMAND_CHECKPOINT_READY, 0);
     if (ret < 0) {
         goto out;
@@ -331,14 +337,14 @@ void *colo_process_incoming_thread(void *opaque)
             goto out;
         }
 
-        /* TODO: read migration data into colo buffer */
+        /* TODO Load VM state */
 
         ret = colo_ctl_put(mis->to_src_file, COLO_COMMAND_VMSTATE_RECEIVED, 0);
         if (ret < 0) {
             goto out;
         }
 
-        /* TODO: load vm state */
+        /* TODO: flush vm state */
 
         ret = colo_ctl_put(mis->to_src_file, COLO_COMMAND_VMSTATE_LOADED, 0);
         if (ret < 0) {
@@ -351,6 +357,10 @@ out:
         error_report("colo incoming thread will exit, detect error: %s",
                      strerror(-ret));
     }
+
+    qemu_mutex_lock_iothread();
+    colo_release_ram_cache();
+    qemu_mutex_unlock_iothread();
 
     if (mis->to_src_file) {
         qemu_fclose(mis->to_src_file);
