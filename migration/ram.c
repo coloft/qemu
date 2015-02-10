@@ -1522,6 +1522,7 @@ static int ram_load(QEMUFile *f, void *opaque, int version_id)
     int flags = 0, ret = 0;
     static uint64_t seq_iter;
     int len = 0;
+    bool need_flush = false;
 
     seq_iter++;
 
@@ -1590,6 +1591,8 @@ static int ram_load(QEMUFile *f, void *opaque, int version_id)
                 ret = -EINVAL;
                 break;
             }
+
+            need_flush = true;
             ch = qemu_get_byte(f);
             ram_handle_compressed(host, ch, TARGET_PAGE_SIZE);
             break;
@@ -1600,6 +1603,8 @@ static int ram_load(QEMUFile *f, void *opaque, int version_id)
                 ret = -EINVAL;
                 break;
             }
+
+            need_flush = true;
             qemu_get_buffer(f, host, TARGET_PAGE_SIZE);
             break;
         case RAM_SAVE_FLAG_COMPRESS_PAGE:
@@ -1632,6 +1637,7 @@ static int ram_load(QEMUFile *f, void *opaque, int version_id)
                 ret = -EINVAL;
                 break;
             }
+            need_flush = true;
             break;
         case RAM_SAVE_FLAG_EOS:
             /* normal exit */
@@ -1651,6 +1657,11 @@ static int ram_load(QEMUFile *f, void *opaque, int version_id)
     }
 
     rcu_read_unlock();
+
+    if (!ret  && ram_cache_enable && need_flush) {
+        DPRINTF("Flush ram_cache\n");
+        colo_flush_ram_cache();
+    }
     DPRINTF("Completed load of VM with exit code %d seq iteration "
             "%" PRIu64 "\n", ret, seq_iter);
     return ret;
@@ -1663,6 +1674,7 @@ static int ram_load(QEMUFile *f, void *opaque, int version_id)
 int colo_init_ram_cache(void)
 {
     RAMBlock *block;
+    int64_t ram_cache_pages = last_ram_offset() >> TARGET_PAGE_BITS;
 
     rcu_read_lock();
     QLIST_FOREACH_RCU(block, &ram_list.blocks, next) {
@@ -1674,6 +1686,14 @@ int colo_init_ram_cache(void)
     }
     rcu_read_unlock();
     ram_cache_enable = true;
+    /*
+    * Record the dirty pages that sent by PVM, we use this dirty bitmap together
+    * with to decide which page in cache should be flushed into SVM's RAM. Here
+    * we use the same name 'migration_bitmap' as for migration.
+    */
+    migration_bitmap = bitmap_new(ram_cache_pages);
+    migration_dirty_pages = 0;
+
     return 0;
 
 out_locked:
@@ -1693,6 +1713,11 @@ void colo_release_ram_cache(void)
     RAMBlock *block;
 
     ram_cache_enable = false;
+
+    if (migration_bitmap) {
+        g_free(migration_bitmap);
+        migration_bitmap = NULL;
+    }
 
     rcu_read_lock();
     QLIST_FOREACH_RCU(block, &ram_list.blocks, next) {
@@ -1718,6 +1743,35 @@ static void *memory_region_get_ram_cache_ptr(MemoryRegion *mr, RAMBlock *block)
     assert(addr - block->offset < block->used_length);
 
     return block->host_cache + (addr - block->offset);
+}
+
+/*
+ * Flush content of RAM cache into SVM's memory.
+ * Only flush the pages that be dirtied by PVM or SVM or both.
+ */
+void colo_flush_ram_cache(void)
+{
+    RAMBlock *block = NULL;
+    void *dst_host;
+    void *src_host;
+    ram_addr_t  offset = 0;
+
+    rcu_read_lock();
+    block = QLIST_FIRST_RCU(&ram_list.blocks);
+    while (block) {
+        offset = migration_bitmap_find_and_reset_dirty(block->mr, offset);
+        if (offset >= block->used_length) {
+            offset = 0;
+            block = QLIST_NEXT_RCU(block, next);
+        } else {
+            dst_host = memory_region_get_ram_ptr(block->mr) + offset;
+            src_host = memory_region_get_ram_cache_ptr(block->mr, block)
+                       + offset;
+            memcpy(dst_host, src_host, TARGET_PAGE_SIZE);
+        }
+    }
+    rcu_read_unlock();
+    assert(migration_dirty_pages == 0);
 }
 
 static SaveVMHandlers savevm_ram_handlers = {
