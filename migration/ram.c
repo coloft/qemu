@@ -1522,6 +1522,7 @@ static int ram_load(QEMUFile *f, void *opaque, int version_id)
     int flags = 0, ret = 0;
     static uint64_t seq_iter;
     int len = 0;
+    bool need_flush = false;
 
     seq_iter++;
 
@@ -1590,6 +1591,8 @@ static int ram_load(QEMUFile *f, void *opaque, int version_id)
                 ret = -EINVAL;
                 break;
             }
+
+            need_flush = true;
             ch = qemu_get_byte(f);
             ram_handle_compressed(host, ch, TARGET_PAGE_SIZE);
             break;
@@ -1600,6 +1603,8 @@ static int ram_load(QEMUFile *f, void *opaque, int version_id)
                 ret = -EINVAL;
                 break;
             }
+
+            need_flush = true;
             qemu_get_buffer(f, host, TARGET_PAGE_SIZE);
             break;
         case RAM_SAVE_FLAG_COMPRESS_PAGE:
@@ -1632,6 +1637,7 @@ static int ram_load(QEMUFile *f, void *opaque, int version_id)
                 ret = -EINVAL;
                 break;
             }
+            need_flush = true;
             break;
         case RAM_SAVE_FLAG_EOS:
             /* normal exit */
@@ -1651,6 +1657,11 @@ static int ram_load(QEMUFile *f, void *opaque, int version_id)
     }
 
     rcu_read_unlock();
+
+    if (!ret  && ram_cache_enable && need_flush) {
+        DPRINTF("Flush ram_cache\n");
+        colo_flush_ram_cache();
+    }
     DPRINTF("Completed load of VM with exit code %d seq iteration "
             "%" PRIu64 "\n", ret, seq_iter);
     return ret;
@@ -1734,6 +1745,82 @@ static void *memory_region_get_ram_cache_ptr(MemoryRegion *mr, RAMBlock *block)
     assert(addr - block->offset < block->used_length);
 
     return block->host_cache + (addr - block->offset);
+}
+
+/* fix me: should this helper function be merged with
+ * migration_bitmap_find_and_reset_dirty ?
+ */
+static inline
+ram_addr_t host_bitmap_find_and_reset_dirty(MemoryRegion *mr,
+                                            ram_addr_t start)
+{
+    unsigned long base = mr->ram_addr >> TARGET_PAGE_BITS;
+    unsigned long nr = base + (start >> TARGET_PAGE_BITS);
+    uint64_t mr_size = TARGET_PAGE_ALIGN(memory_region_size(mr));
+    unsigned long size = base + (mr_size >> TARGET_PAGE_BITS);
+
+    unsigned long next;
+
+    next = find_next_bit(ram_list.dirty_memory[DIRTY_MEMORY_MIGRATION],
+                         size, nr);
+    if (next < size) {
+        clear_bit(next, ram_list.dirty_memory[DIRTY_MEMORY_MIGRATION]);
+    }
+    return (next - base) << TARGET_PAGE_BITS;
+}
+
+/*
+ * Flush content of RAM cache into SVM's memory.
+ * Only flush the pages that be dirtied by PVM or SVM or both.
+ * TODO: option walk optimization:
+ *   1. bitmap = host_bitmap | migration_bitmap
+ *   2. walk bitmap and find offset
+ *   3. memcpy
+ */
+void colo_flush_ram_cache(void)
+{
+    RAMBlock *block = NULL;
+    void *dst_host;
+    void *src_host;
+    ram_addr_t cache_offset = 0, host_offset = 0, offset = 0;
+    int64_t host_dirty = 0, remote_dirty = 0, both_dirty = 0;
+
+    address_space_sync_dirty_bitmap(&address_space_memory);
+    rcu_read_lock();
+    block = QLIST_FIRST_RCU(&ram_list.blocks);
+    while (block) {
+        if (offset == cache_offset) {
+            cache_offset =
+                migration_bitmap_find_and_reset_dirty(block->mr, cache_offset);
+        }
+        if (offset == host_offset) {
+            host_offset =
+                host_bitmap_find_and_reset_dirty(block->mr, host_offset);
+        }
+
+        if (cache_offset >= block->used_length &&
+            host_offset >= block->used_length) {
+            offset = host_offset = cache_offset = 0;
+            block = QLIST_NEXT_RCU(block, next);
+        } else {
+            if (host_offset <= cache_offset) {
+                offset = host_offset;
+                host_dirty++;
+                both_dirty += (host_offset == cache_offset);
+            } else {
+                offset = cache_offset;
+                remote_dirty++;
+            }
+
+            dst_host = memory_region_get_ram_ptr(block->mr) + offset;
+            src_host = memory_region_get_ram_cache_ptr(block->mr, block)
+                       + offset;
+            memcpy(dst_host, src_host, TARGET_PAGE_SIZE);
+        }
+    }
+    rcu_read_unlock();
+    assert(migration_dirty_pages == 0);
+    trace_colo_flush_ram_cache(host_dirty, remote_dirty, both_dirty);
 }
 
 static SaveVMHandlers savevm_ram_handlers = {

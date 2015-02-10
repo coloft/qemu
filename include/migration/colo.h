@@ -32,5 +32,6 @@ void *colo_process_incoming_checkpoints(void *opaque);
 bool migration_incoming_in_colo_state(void);
 /* ram cache */
 int create_and_init_ram_cache(void);
+void colo_flush_ram_cache(void);
 void release_ram_cache(void);
 #endif

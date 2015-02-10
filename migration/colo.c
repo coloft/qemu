@@ -429,8 +429,6 @@ void *colo_process_incoming_checkpoints(void *opaque)
         }
         qemu_mutex_unlock_iothread();
 
-        /* TODO: flush vm state */
-
         ret = colo_ctl_put(ctl, COLO_CHECKPOINT_LOADED);
         if (ret < 0) {
             goto out;
