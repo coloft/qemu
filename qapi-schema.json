@@ -704,6 +704,10 @@
 #
 # @vmstate-loaded: VM's state has been loaded by SVM
 #
+# @guest-shutdown: shutdown require from PVM to SVM
+#
+# @ram-steal: live migrate ram from PVM to SVM
+#
 # Since: 2.5
 ##
 { 'enum': 'COLOCmd',
