@@ -121,6 +121,57 @@ static int colo_nic_configure(COLONicState *cns,
     return -1;
 }
 
+static int configure_one_nic(COLONicState *cns,
+             bool up, int side, int index)
+{
+    struct nic_device *nic;
+
+    assert(cns);
+
+    QTAILQ_FOREACH(nic, &nic_devices, next) {
+        if (nic->cns == cns) {
+            if (up == nic->is_up) {
+                return 0;
+            }
+
+            if (!nic->configure || (nic->configure(nic->cns, up, side, index) &&
+                up)) {
+                return -1;
+            }
+            nic->is_up = up;
+            return 0;
+        }
+    }
+
+    return -1;
+}
+
+static int configure_nic(int side, int index)
+{
+    struct nic_device *nic;
+
+    if (QTAILQ_EMPTY(&nic_devices)) {
+        return -1;
+    }
+
+    QTAILQ_FOREACH(nic, &nic_devices, next) {
+        if (configure_one_nic(nic->cns, 1, side, index)) {
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
+static void teardown_nic(int side, int index)
+{
+    struct nic_device *nic;
+
+    QTAILQ_FOREACH(nic, &nic_devices, next) {
+        configure_one_nic(nic->cns, 0, side, index);
+    }
+}
+
 void colo_add_nic_devices(COLONicState *cns)
 {
     struct nic_device *nic;
@@ -151,8 +202,26 @@ void colo_remove_nic_devices(COLONicState *cns)
 
     QTAILQ_FOREACH_SAFE(nic, &nic_devices, next, next_nic) {
         if (nic->cns == cns) {
+            configure_one_nic(cns, 0, get_colo_mode(), getpid());
             QTAILQ_REMOVE(&nic_devices, nic, next);
             g_free(nic);
         }
     }
+}
+
+int colo_proxy_init(enum COLOMode mode)
+{
+    int ret = -1;
+
+    ret = configure_nic(mode, getpid());
+    if (ret != 0) {
+        error_report("excute colo-proxy-script failed");
+    }
+
+    return ret;
+}
+
+void colo_proxy_destroy(enum COLOMode mode)
+{
+    teardown_nic(mode, getpid());
 }

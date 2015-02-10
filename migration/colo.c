@@ -17,6 +17,7 @@
 #include "qemu/sockets.h"
 #include "migration/failover.h"
 #include "qapi-event.h"
+#include "net/colo-nic.h"
 
 /* Fix me: Convert to use QAPI */
 typedef enum COLOCommand {
@@ -344,6 +345,10 @@ static void *colo_thread(void *opaque)
     int i, ret;
 
     failover_init_state();
+    if (colo_proxy_init(COLO_MODE_PRIMARY) != 0) {
+        error_report("Init colo proxy error");
+        goto out;
+    }
 
     colo_control = qemu_fopen_socket(qemu_get_fd(s->file), "rb");
     if (!colo_control) {
@@ -404,6 +409,8 @@ out:
         failover_request_active(NULL);
     }
     qemu_mutex_unlock_iothread();
+
+    colo_proxy_destroy(COLO_MODE_PRIMARY);
 
     return NULL;
 }
@@ -470,6 +477,11 @@ void *colo_process_incoming_checkpoints(void *opaque)
     migrate_set_state(&mis->state, MIGRATION_STATUS_ACTIVE,
                       MIGRATION_STATUS_COLO);
     failover_init_state();
+     /* configure the network */
+    if (colo_proxy_init(COLO_MODE_SECONDARY) != 0) {
+        error_report("Init colo proxy error\n");
+        goto out;
+    }
 
     ctl = qemu_fopen_socket(fd, "wb");
     if (!ctl) {
@@ -628,6 +640,8 @@ out:
         exit(1);
     }
 
+    colo_proxy_destroy(COLO_MODE_SECONDARY);
     migration_incoming_exit_colo();
+
     return NULL;
 }
