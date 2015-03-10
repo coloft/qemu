@@ -461,7 +461,6 @@
   'data': {'checkpoint-count': 'int', 'proxy-discompare-count': 'int',
            'periodic-checkpoint-count': 'int', 'total-downtime': 'int',
            'max-downtime': 'int', 'min-downtime': 'int' } }
-
 ##
 # @MigrationInfo
 #

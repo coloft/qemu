@@ -71,6 +71,7 @@ typedef enum COLOCommand {
     COLO_CHECKPOINT_RECEIVED,
     COLO_CHECKPOINT_LOADED,
     COLO_GUEST_SHUTDOWN,
+    COLO_RAM_LIVE_MIGRATE,
 
     COLO_CHECKPOINT_MAX
 } COLOCommand;
@@ -83,6 +84,7 @@ const char * const COLOCommand_lookup[] = {
     [COLO_CHECKPOINT_RECEIVED] = "checkpoint-received",
     [COLO_CHECKPOINT_LOADED] = "checkpoint-loaded",
     [COLO_GUEST_SHUTDOWN] = "guest-shutdown",
+    [COLO_RAM_LIVE_MIGRATE] = "ram-live-migrate",
     [COLO_CHECKPOINT_MAX] = NULL,
 };
 
@@ -367,7 +369,10 @@ static int colo_do_checkpoint_transaction(MigrationState *s, QEMUFile *control)
         goto out;
     }
     qemu_fflush(trans);
-    qemu_save_ram_state(s->file);
+    ret = qemu_save_ram_state(s->file, true);
+    if (ret < 0) {
+        goto out;
+     }
     qemu_mutex_unlock_iothread();
 
     /* we send the total size of the vmstate first */
@@ -432,9 +437,22 @@ out:
     return ret;
 }
 
+/* should be calculated by bandwidth and max downtime ? */
+#define THRESHOLD_PENDING_SIZE (10 * 1024 * 1024UL)
+
+static int colo_need_live_migrate_ram(MigrationState *s)
+{
+    uint64_t pending_size;
+    int64_t max_size = THRESHOLD_PENDING_SIZE;
+
+    pending_size = qemu_savevm_state_pending(s->file, max_size);
+    return (pending_size && pending_size >= max_size);
+}
+
 static int  ram_prepare_before_save(MigrationState *s)
 {
     int ret;
+
     /* Disable block migration */
     s->params.blk = 0;
     s->params.shared = 0;
@@ -528,12 +546,24 @@ static void *colo_thread(void *opaque)
         }
 
         /*
-         * No proxy checkpoint is request, wait for 100ms
+         * No proxy checkpoint is request, wait for 100ms or
+         * transfer some dirty ram page,
          * and then check if we need checkpoint again.
          */
         current_time = qemu_clock_get_ms(QEMU_CLOCK_HOST);
         if (current_time - checkpoint_time < colo_checkpoint_period) {
-            g_usleep(100000);
+            if (colo_need_live_migrate_ram(s)) {
+                ret = colo_ctl_put(s->file, COLO_RAM_LIVE_MIGRATE);
+                if (ret < 0) {
+                    goto out;
+                }
+                ret = qemu_save_ram_state(s->file, false);
+                if (ret < 0) {
+                    goto out;
+                }
+            } else {
+                g_usleep(100000);
+            }
             continue;
         } else {
             s->checkpoint_state.periodic_checkpoint_count++;
@@ -616,6 +646,7 @@ static int colo_wait_handle_cmd(QEMUFile *f, int *checkpoint_request)
 
     ret = colo_ctl_get_value(f, &cmd);
     if (ret < 0) {
+        /* do failover ? */
         return -1;
     }
 
@@ -634,6 +665,10 @@ static int colo_wait_handle_cmd(QEMUFile *f, int *checkpoint_request)
         * process, do we need some cleanup?
         */
         qemu_thread_exit(0);
+    case COLO_RAM_LIVE_MIGRATE:
+        *checkpoint_request = 0;
+        ret = qemu_load_ram_state(f);
+        return ret;
     default:
         return -1;
     }
@@ -664,7 +699,6 @@ void *colo_process_incoming_checkpoints(void *opaque)
     migrate_set_state(&mis->state, MIGRATION_STATUS_ACTIVE,
                       MIGRATION_STATUS_COLO);
     failover_init_state();
-     /* configure the network */
     if (colo_proxy_init(COLO_MODE_SECONDARY) != 0) {
         error_report("Init colo proxy error\n");
         goto out;
