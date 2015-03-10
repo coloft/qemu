@@ -19,12 +19,8 @@
 #include "qemu/sockets.h"
 #include "migration/failover.h"
 #include "qapi-event.h"
-
-/*
- * checkpoint interval: unit ms
- * Note: Please change this default value to 10000 when we support hybrid mode.
- */
-#define CHECKPOINT_MAX_PEROID 200
+#include "qmp-commands.h"
+#include "qapi-types.h"
 
 /*
  * The delay time before qemu begin the procedure of default failover treatment.
@@ -36,6 +32,7 @@
 
 static QEMUBH *colo_bh;
 static bool vmstate_loading;
+
 /* colo buffer */
 #define COLO_BUFFER_BASE_SIZE (4 * 1024 * 1024)
 
@@ -359,7 +356,8 @@ static void *colo_thread(void *opaque)
         }
 
         current_time = qemu_clock_get_ms(QEMU_CLOCK_HOST);
-        if (current_time - checkpoint_time < CHECKPOINT_MAX_PEROID) {
+        if (current_time - checkpoint_time <
+            s->parameters[MIGRATION_PARAMETER_CHECKPOINT_DELAY]) {
             g_usleep(100000);
             continue;
         }
