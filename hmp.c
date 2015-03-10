@@ -1367,7 +1367,6 @@ void hmp_migrate_set_parameter(Monitor *mon, const QDict *qdict)
             case MIGRATION_PARAMETER_CPU_THROTTLE_INCREMENT:
                 p.has_cpu_throttle_increment = true;
                 use_int_value = true;
-                break;
             case MIGRATION_PARAMETER_TLS_CREDS:
                 p.has_tls_creds = true;
                 p.tls_creds = (char *) valuestr;
