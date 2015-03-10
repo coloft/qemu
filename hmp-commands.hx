@@ -1049,6 +1049,21 @@ Tell COLO that heartbeat is lost, a failover or takeover is needed.
 ETEXI
 
     {
+        .name       = "colo_set_checkpoint_period",
+        .args_type  = "value:i",
+        .params     = "value",
+        .help       = "set checkpoint period (in ms) for colo. "
+        "Defaults to 100ms",
+        .mhandler.cmd = hmp_colo_set_checkpoint_period,
+    },
+
+STEXI
+@item migrate_set_checkpoint_period @var{value}
+@findex migrate_set_checkpoint_period
+Set checkpoint period to @var{value} (in ms) for colo.
+ETEXI
+
+    {
         .name       = "client_migrate_info",
         .args_type  = "protocol:s,hostname:s,port:i?,tls-port:i?,cert-subject:s?",
         .params     = "protocol hostname port tls-port cert-subject",

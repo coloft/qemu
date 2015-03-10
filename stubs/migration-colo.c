@@ -52,3 +52,7 @@ void qmp_colo_lost_heartbeat(Error **errp)
                      " with --enable-colo option in order to support"
                      " COLO feature");
 }
+
+void qmp_colo_set_checkpoint_period(int64_t value, Error **errp)
+{
+}

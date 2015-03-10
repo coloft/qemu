@@ -691,6 +691,19 @@
 { 'command': 'colo-lost-heartbeat' }
 
 ##
+# @colo-set-checkpoint-period
+#
+# Set colo checkpoint period
+#
+# @value: period of colo checkpoint in ms
+#
+# Returns: nothing on success
+#
+# Since: 2.4
+##
+{ 'command': 'colo-set-checkpoint-period', 'data': {'value': 'int'} }
+
+##
 # @MouseInfo:
 #
 # Information about a mouse device.

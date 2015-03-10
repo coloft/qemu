@@ -1280,6 +1280,13 @@ void hmp_colo_lost_heartbeat(Monitor *mon, const QDict *qdict)
     hmp_handle_error(mon, &err);
 }
 
+void hmp_colo_set_checkpoint_period(Monitor *mon, const QDict *qdict)
+{
+    int64_t value = qdict_get_int(qdict, "value");
+
+    qmp_colo_set_checkpoint_period(value, NULL);
+}
+
 void hmp_set_password(Monitor *mon, const QDict *qdict)
 {
     const char *protocol  = qdict_get_str(qdict, "protocol");

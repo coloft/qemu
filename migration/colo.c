@@ -19,6 +19,7 @@
 #include "migration/failover.h"
 #include "qapi-event.h"
 #include "net/colo-nic.h"
+#include "qmp-commands.h"
 
 /*
 * We should not do checkpoint one after another without any time interval,
@@ -84,6 +85,9 @@ const char * const COLOCommand_lookup[] = {
 
 static QEMUBH *colo_bh;
 static bool vmstate_loading;
+
+int64_t colo_checkpoint_period = CHECKPOINT_MAX_PEROID;
+
 /* colo buffer */
 #define COLO_BUFFER_BASE_SIZE (4 * 1024 * 1024)
 
@@ -104,6 +108,11 @@ bool migration_incoming_in_colo_state(void)
     MigrationIncomingState *mis = migration_incoming_get_current();
 
     return (mis && (mis->state == MIGRATION_STATUS_COLO));
+}
+
+void qmp_colo_set_checkpoint_period(int64_t value, Error **errp)
+{
+    colo_checkpoint_period = value;
 }
 
 static bool colo_runstate_is_stopped(void)
@@ -420,7 +429,7 @@ static void *colo_thread(void *opaque)
          * and then check if we need checkpoint again.
          */
         current_time = qemu_clock_get_ms(QEMU_CLOCK_HOST);
-        if (current_time - checkpoint_time < CHECKPOINT_MAX_PEROID) {
+        if (current_time - checkpoint_time < colo_checkpoint_period) {
             g_usleep(100000);
             continue;
         }

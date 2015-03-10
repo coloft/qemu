@@ -800,6 +800,28 @@ Example:
 EQMP
 
     {
+         .name       = "colo-set-checkpoint-period",
+         .args_type  = "value:i",
+         .mhandler.cmd_new = qmp_marshal_input_colo_set_checkpoint_period,
+    },
+
+SQMP
+colo-set-checkpoint-period
+--------------------------
+
+set checkpoint period
+
+Arguments:
+- "value": checkpoint period
+
+Example:
+
+-> { "execute": "colo-set-checkpoint-period", "arguments": { "value": "1000" } }
+<- { "return": {} }
+
+EQMP
+
+    {
         .name       = "client_migrate_info",
         .args_type  = "protocol:s,hostname:s,port:i?,tls-port:i?,cert-subject:s?",
         .params     = "protocol hostname port tls-port cert-subject",
