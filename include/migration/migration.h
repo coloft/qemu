@@ -53,6 +53,9 @@ struct COLOCheckpointState {
     int64_t max_downtime;
     int64_t min_downtime;
 
+    int64_t live_transfer_pages;
+    int64_t normal_transfer_pages;
+
     int state;
 };
 

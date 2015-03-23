@@ -470,6 +470,10 @@ MigrationInfo *qmp_query_migrate(Error **errp)
         info->colo_stats->total_downtime = s->checkpoint_state.total_downtime;
         info->colo_stats->max_downtime = s->checkpoint_state.max_downtime;
         info->colo_stats->min_downtime = s->checkpoint_state.min_downtime;
+        info->colo_stats->live_transfer_pages =
+                                       s->checkpoint_state.live_transfer_pages;
+        info->colo_stats->normal_transfer_pages =
+                                     s->checkpoint_state.normal_transfer_pages;
         break;
     case MIGRATION_STATUS_COMPLETED:
         get_xbzrle_cache_stats(info);

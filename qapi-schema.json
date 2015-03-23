@@ -455,12 +455,19 @@
 #
 # @min-downtime: minimize downtime of VM when do checkpoint
 #
+# @live-transfer-pages: number of pages that transferred during checkpoint's wait time
+#
+# @normal-transfer-pages: number of pages that transferred during checkpoint process
+#
 # Since: 2.4
 ##
 { 'struct': 'COLOCheckpointStats',
   'data': {'checkpoint-count': 'int', 'proxy-discompare-count': 'int',
            'periodic-checkpoint-count': 'int', 'total-downtime': 'int',
-           'max-downtime': 'int', 'min-downtime': 'int' } }
+           'max-downtime': 'int', 'min-downtime': 'int',
+           'live-transfer-pages': 'int',
+           'normal-transfer-pages': 'int' } }
+
 ##
 # @MigrationInfo
 #

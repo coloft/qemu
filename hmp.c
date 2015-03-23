@@ -244,6 +244,10 @@ void hmp_info_migrate(Monitor *mon, const QDict *qdict)
                        info->colo_stats->max_downtime);
         monitor_printf(mon, "min downtime: %" PRIu64 " milliseconds\n",
                        info->colo_stats->min_downtime);
+        monitor_printf(mon, "live transferred: %" PRIu64 " pages\n",
+                       info->colo_stats->live_transfer_pages);
+        monitor_printf(mon, "normal transferred: %" PRIu64 " pages\n",
+                       info->colo_stats->normal_transfer_pages);
     }
     qapi_free_MigrationInfo(info);
     qapi_free_MigrationCapabilityStatusList(caps);
