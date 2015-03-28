@@ -231,7 +231,20 @@ void hmp_info_migrate(Monitor *mon, const QDict *qdict)
         monitor_printf(mon, "xbzrle overflow : %" PRIu64 "\n",
                        info->xbzrle_cache->overflow);
     }
-
+    if (info->has_colo_stats) {
+        monitor_printf(mon, "checkpoint count: %" PRIu64 "\n",
+                       info->colo_stats->checkpoint_count);
+        monitor_printf(mon, "proxy discompare count: %" PRIu64 "\n",
+                       info->colo_stats->proxy_discompare_count);
+        monitor_printf(mon, "periodic checkpint count: %" PRIu64 "\n",
+                       info->colo_stats->periodic_checkpoint_count);
+        monitor_printf(mon, "total downtime: %" PRIu64 " milliseconds\n",
+                       info->colo_stats->total_downtime);
+        monitor_printf(mon, "max downtime: %" PRIu64 " milliseconds\n",
+                       info->colo_stats->max_downtime);
+        monitor_printf(mon, "min downtime: %" PRIu64 " milliseconds\n",
+                       info->colo_stats->min_downtime);
+    }
     qapi_free_MigrationInfo(info);
     qapi_free_MigrationCapabilityStatusList(caps);
 }

@@ -439,6 +439,30 @@
             'active', 'completed', 'failed', 'colo' ] }
 
 ##
+# @COLOCheckpointStats
+#
+# Detailed colo checkpooint statistics
+#
+# @checkpoint-count: the number of checkpoint times
+#
+# @proxy-discompare-count: the number of net proxy discompare times
+#
+# @periodic-checkpoint-count: the number of periodic checkpoint times
+#
+# @total-downtime: total amount of milliseconds for VM's downtime during checkpoint
+#
+# @max-downtime: maximum downtime of VM when do checkpoint
+#
+# @min-downtime: minimize downtime of VM when do checkpoint
+#
+# Since: 2.4
+##
+{ 'struct': 'COLOCheckpointStats',
+  'data': {'checkpoint-count': 'int', 'proxy-discompare-count': 'int',
+           'periodic-checkpoint-count': 'int', 'total-downtime': 'int',
+           'max-downtime': 'int', 'min-downtime': 'int' } }
+
+##
 # @MigrationInfo
 #
 # Information about current migration process.
@@ -477,6 +501,9 @@
 #        may be expensive, but do not actually occur during the iterative
 #        migration rounds themselves. (since 1.6)
 #
+# @colo-stats: #optional @COLOCheckpointStats containing detailed checkpoint
+#        statistics. (since 2.4)
+#
 # Since: 0.14.0
 ##
 { 'struct': 'MigrationInfo',
@@ -486,7 +513,8 @@
            '*total-time': 'int',
            '*expected-downtime': 'int',
            '*downtime': 'int',
-           '*setup-time': 'int'} }
+           '*setup-time': 'int',
+           '*colo-stats': 'COLOCheckpointStats' } }
 
 ##
 # @query-migrate

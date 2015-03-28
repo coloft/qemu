@@ -456,7 +456,20 @@ MigrationInfo *qmp_query_migrate(Error **errp)
         break;
     case MIGRATION_STATUS_COLO:
         info->has_status = true;
-        /* TODO: display COLO specific information (checkpoint info etc.) */
+        info->has_total_time = true;
+        info->total_time = qemu_clock_get_ms(QEMU_CLOCK_REALTIME)
+            - s->total_time;
+        info->has_colo_stats = true;
+        info->colo_stats = g_malloc0(sizeof(*info->colo_stats));
+        info->colo_stats->checkpoint_count =
+                                    s->checkpoint_state.checkpoint_count;
+        info->colo_stats->proxy_discompare_count =
+                                    s->checkpoint_state.proxy_discompare_count;
+        info->colo_stats->periodic_checkpoint_count =
+                                 s->checkpoint_state.periodic_checkpoint_count;
+        info->colo_stats->total_downtime = s->checkpoint_state.total_downtime;
+        info->colo_stats->max_downtime = s->checkpoint_state.max_downtime;
+        info->colo_stats->min_downtime = s->checkpoint_state.min_downtime;
         break;
     case MIGRATION_STATUS_COMPLETED:
         get_xbzrle_cache_stats(info);
