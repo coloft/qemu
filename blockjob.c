@@ -404,3 +404,13 @@ void block_job_defer_to_main_loop(BlockJob *job,
 
     qemu_bh_schedule(data->bh);
 }
+
+void block_job_do_checkpoint(BlockJob *job, Error **errp)
+{
+    if (!job->driver->do_checkpoint) {
+        error_setg(errp, "this feature or command is not currently supported");
+        return;
+    }
+
+    job->driver->do_checkpoint(job, errp);
+}
