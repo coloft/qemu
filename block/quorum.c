@@ -87,6 +87,8 @@ typedef struct BDRVQuorumState {
                             */
 
     QuorumReadPattern read_pattern;
+
+    int replication_index; /* store which child supports block replication */
 } BDRVQuorumState;
 
 typedef struct QuorumAIOCB QuorumAIOCB;
@@ -1020,6 +1022,7 @@ static int quorum_open(BlockDriverState *bs, QDict *options, int flags,
     }
 
     g_free(opened);
+    s->replication_index = -1;
     goto exit;
 
 close_exit:
@@ -1180,6 +1183,76 @@ static void quorum_refresh_filename(BlockDriverState *bs)
     bs->full_open_options = opts;
 }
 
+static void quorum_start_replication(BlockDriverState *bs, ReplicationMode mode,
+                                     Error **errp)
+{
+    BDRVQuorumState *s = bs->opaque;
+    int count = 0, i, index;
+    Error *local_err = NULL;
+
+    /*
+     * TODO: support REPLICATION_MODE_SECONDARY if we allow secondary
+     * QEMU becoming primary QEMU.
+     */
+    if (mode != REPLICATION_MODE_PRIMARY) {
+        error_setg(errp, "The replication mode for quorum should be 'primary'");
+        return;
+    }
+
+    if (s->read_pattern != QUORUM_READ_PATTERN_FIFO) {
+        error_setg(errp, "Block replication needs read pattern 'fifo'");
+        return;
+    }
+
+    for (i = 0; i < s->num_children; i++) {
+        bdrv_start_replication(s->bs[i], mode, &local_err);
+        if (local_err) {
+            error_free(local_err);
+            local_err = NULL;
+        } else {
+            count++;
+            index = i;
+        }
+    }
+
+    if (count == 0) {
+        error_setg(errp, "No child supports block replication");
+    } else if (count > 1) {
+        for (i = 0; i < s->num_children; i++) {
+            bdrv_stop_replication(s->bs[i], false, NULL);
+        }
+        error_setg(errp, "Too many children support block replication");
+    } else {
+        s->replication_index = index;
+    }
+}
+
+static void quorum_do_checkpoint(BlockDriverState *bs, Error **errp)
+{
+    BDRVQuorumState *s = bs->opaque;
+
+    if (s->replication_index < 0) {
+        error_setg(errp, "Block replication is not running");
+        return;
+    }
+
+    bdrv_do_checkpoint(s->bs[s->replication_index], errp);
+}
+
+static void quorum_stop_replication(BlockDriverState *bs, bool failover,
+                                    Error **errp)
+{
+    BDRVQuorumState *s = bs->opaque;
+
+    if (s->replication_index < 0) {
+        error_setg(errp, "Block replication is not running");
+        return;
+    }
+
+    bdrv_stop_replication(s->bs[s->replication_index], failover, errp);
+    s->replication_index = -1;
+}
+
 static BlockDriver bdrv_quorum = {
     .format_name                        = "quorum",
     .protocol_name                      = "quorum",
@@ -1206,6 +1279,10 @@ static BlockDriver bdrv_quorum = {
 
     .is_filter                          = true,
     .bdrv_recurse_is_first_non_filter   = quorum_recurse_is_first_non_filter,
+
+    .bdrv_start_replication             = quorum_start_replication,
+    .bdrv_do_checkpoint                 = quorum_do_checkpoint,
+    .bdrv_stop_replication              = quorum_stop_replication,
 };
 
 static void bdrv_quorum_init(void)
