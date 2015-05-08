@@ -40,6 +40,22 @@
   'data': ['auto', 'none', 'lba', 'large', 'rechs']}
 
 ##
+# @ReplicationMode
+#
+# An enumeration of replication modes.
+#
+# @unprotected: Replication is not started or after failover.
+#
+# @primary: Primary mode, the vm's state will be sent to secondary QEMU.
+#
+# @secondary: Secondary mode, receive the vm's state from primary QEMU.
+#
+# Since: 2.4
+##
+{ 'enum' : 'ReplicationMode',
+  'data' : ['unprotected', 'primary', 'secondary']}
+
+##
 # @BlockdevSnapshotInternal
 #
 # @device: the name of the device to generate the snapshot from
