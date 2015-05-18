@@ -30,4 +30,6 @@ void colo_remove_nic_devices(COLONicState *cns);
 int colo_proxy_init(enum COLOMode mode);
 void colo_proxy_destroy(enum COLOMode mode);
 
+int colo_proxy_compare(void);
+
 #endif

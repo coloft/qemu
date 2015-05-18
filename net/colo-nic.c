@@ -427,3 +427,8 @@ void colo_proxy_destroy(enum COLOMode mode)
     }
     teardown_nic(mode, getpid());
 }
+
+int colo_proxy_compare(void)
+{
+    return atomic_xchg(&packet_compare_different, 0);
+}
