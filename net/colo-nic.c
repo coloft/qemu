@@ -22,6 +22,7 @@
 #include "net/colo-nic.h"
 #include "qemu/error-report.h"
 #include "net/tap.h"
+#include "trace.h"
 
 /* Remove the follow define after proxy is merged into kernel,
 * using #include <libnfnetlink/libnfnetlink.h> instead.
@@ -79,6 +80,7 @@ typedef struct nic_device {
 
 static struct nfnl_handle *nfnlh;
 static struct nfnl_subsys_handle *nfnlssh;
+static int32_t packet_compare_different; /* The result of packet comparing */
 
 static int launch_colo_script(COLONicState *cns, bool up, int side, int index)
 {
@@ -297,6 +299,38 @@ static int colo_proxy_send(enum nfnl_colo_msg_types msg_type,
     return ret;
 }
 
+static int __colo_rcv_pkt(struct nlmsghdr *nlh, struct nfattr *nfa[],
+                          void *data)
+{
+    /* struct nfgenmsg *nfmsg = NLMSG_DATA(nlh); */
+    int32_t  result = ntohl(nfnl_get_data(nfa, NFNL_COLO_COMPARE_RESULT,
+                                          int32_t));
+
+    atomic_set(&packet_compare_different, result);
+    trace_colo_rcv_pkt(result);
+    return 0;
+}
+
+static struct nfnl_callback colo_nic_cb = {
+    .call   = &__colo_rcv_pkt,
+    .attr_count = NFNL_COLO_KERNEL_NOTIFY_MAX,
+};
+
+static void colo_proxy_recv(void *opaque)
+{
+    unsigned char *buf = g_malloc0(2048);
+    int len;
+    int ret;
+
+    len = nfnl_recv(nfnlh, buf, 2048);
+    ret = nfnl_handle_packet(nfnlh, (char *)buf, len);
+    if (ret < 0) {/* Notify colo thread the error */
+        atomic_set(&packet_compare_different, -1);
+        error_report("call nfnl_handle_packet failed");
+    }
+    g_free(buf);
+}
+
 static int check_proxy_ack(void)
 {
     unsigned char *buf = g_malloc0(2048);
@@ -352,6 +386,11 @@ int colo_proxy_init(enum COLOMode mode)
         goto err_out;
     }
 
+    ret = nfnl_callback_register(nfnlssh, NFCOLO_KERNEL_NOTIFY, &colo_nic_cb);
+    if (ret < 0) {
+        goto err_out;
+    }
+
     /* Netlink is not a reliable protocol, So it is necessary to request proxy
      * module to acknowledge in the first time.
      */
@@ -371,6 +410,8 @@ int colo_proxy_init(enum COLOMode mode)
         goto err_out;
     }
 
+   qemu_set_fd_handler(nfnl_fd(nfnlh), colo_proxy_recv, NULL, NULL);
+
     return 0;
 err_out:
     nfnl_close(nfnlh);
@@ -381,6 +422,7 @@ err_out:
 void colo_proxy_destroy(enum COLOMode mode)
 {
     if (nfnlh) {
+        qemu_set_fd_handler(nfnl_fd(nfnlh), NULL, NULL, NULL);
         nfnl_close(nfnlh);
     }
     teardown_nic(mode, getpid());
