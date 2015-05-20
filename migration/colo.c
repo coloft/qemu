@@ -10,10 +10,12 @@
  * later.  See the COPYING file in the top-level directory.
  */
 
+#include <unistd.h>
 #include "sysemu/sysemu.h"
 #include "migration/colo.h"
 #include "trace.h"
 #include "qemu/error-report.h"
+#include "qemu/sockets.h"
 
 bool colo_supported(void)
 {
@@ -34,6 +36,103 @@ bool migration_incoming_in_colo_state(void)
     return mis && (mis->state == MIGRATION_STATUS_COLO);
 }
 
+/* colo checkpoint control helper */
+static int colo_ctl_put(QEMUFile *f, uint32_t cmd, uint64_t value)
+{
+    int ret = 0;
+
+    qemu_put_be32(f, cmd);
+    qemu_put_be64(f, value);
+    qemu_fflush(f);
+
+    ret = qemu_file_get_error(f);
+    trace_colo_ctl_put(COLOCommand_lookup[cmd], value);
+
+    return ret;
+}
+
+static int colo_ctl_get_cmd(QEMUFile *f, uint32_t *cmd)
+{
+    int ret = 0;
+
+    *cmd = qemu_get_be32(f);
+    ret = qemu_file_get_error(f);
+    if (ret < 0) {
+        return ret;
+    }
+    if (*cmd >= COLO_COMMAND_MAX) {
+        error_report("Invalid colo command, get cmd:%d", *cmd);
+        return -EINVAL;
+    }
+    trace_colo_ctl_get(COLOCommand_lookup[*cmd]);
+
+    return 0;
+}
+
+static int colo_ctl_get(QEMUFile *f, uint32_t require)
+{
+    int ret;
+    uint32_t cmd;
+    uint64_t value;
+
+    ret = colo_ctl_get_cmd(f, &cmd);
+    if (ret < 0) {
+        return ret;
+    }
+    if (cmd != require) {
+        error_report("Unexpect colo command, expect:%d, but get cmd:%d",
+                     require, cmd);
+        return -EINVAL;
+    }
+
+    value = qemu_get_be64(f);
+    ret = qemu_file_get_error(f);
+    if (ret < 0) {
+        return ret;
+    }
+
+    return value;
+}
+
+static int colo_do_checkpoint_transaction(MigrationState *s)
+{
+    int ret;
+
+    ret = colo_ctl_put(s->to_dst_file, COLO_COMMAND_CHECKPOINT_REQUEST, 0);
+    if (ret < 0) {
+        goto out;
+    }
+
+    ret = colo_ctl_get(s->from_dst_file, COLO_COMMAND_CHECKPOINT_REPLY);
+    if (ret < 0) {
+        goto out;
+    }
+
+    /* TODO: suspend and save vm state to colo buffer */
+
+    ret = colo_ctl_put(s->to_dst_file, COLO_COMMAND_VMSTATE_SEND, 0);
+    if (ret < 0) {
+        goto out;
+    }
+
+    /* TODO: send vmstate to Secondary */
+
+    ret = colo_ctl_get(s->from_dst_file, COLO_COMMAND_VMSTATE_RECEIVED);
+    if (ret < 0) {
+        goto out;
+    }
+
+    ret = colo_ctl_get(s->from_dst_file, COLO_COMMAND_VMSTATE_LOADED);
+    if (ret < 0) {
+        goto out;
+    }
+
+    /* TODO: resume Primary */
+
+out:
+    return ret;
+}
+
 static void colo_process_checkpoint(MigrationState *s)
 {
     int fd, ret = 0;
@@ -51,12 +150,27 @@ static void colo_process_checkpoint(MigrationState *s)
         goto out;
     }
 
+    /*
+     * Wait for Secondary finish loading vm states and enter COLO
+     * restore.
+     */
+    ret = colo_ctl_get(s->from_dst_file, COLO_COMMAND_CHECKPOINT_READY);
+    if (ret < 0) {
+        goto out;
+    }
+
     qemu_mutex_lock_iothread();
     vm_start();
     qemu_mutex_unlock_iothread();
     trace_colo_vm_state_change("stop", "run");
 
-    /*TODO: COLO checkpoint savevm loop*/
+    while (s->state == MIGRATION_STATUS_COLO) {
+        /* start a colo checkpoint */
+        ret = colo_do_checkpoint_transaction(s);
+        if (ret < 0) {
+            goto out;
+        }
+    }
 
 out:
     if (ret < 0) {
@@ -79,6 +193,39 @@ void migrate_start_colo_process(MigrationState *s)
     qemu_mutex_lock_iothread();
 }
 
+/*
+ * return:
+ * 0: start a checkpoint
+ * -1: some error happened, exit colo restore
+ */
+static int colo_wait_handle_cmd(QEMUFile *f, int *checkpoint_request)
+{
+    int ret;
+    uint32_t cmd;
+    uint64_t value;
+
+    ret = colo_ctl_get_cmd(f, &cmd);
+    if (ret < 0) {
+        /* do failover ? */
+        return ret;
+    }
+    /* Fix me: this value should be 0, which is not so good,
+     * should be used for checking ?
+     */
+    value = qemu_get_be64(f);
+    if (value != 0) {
+        return -EINVAL;
+    }
+
+    switch (cmd) {
+    case COLO_COMMAND_CHECKPOINT_REQUEST:
+        *checkpoint_request = 1;
+        return 0;
+    default:
+        return -EINVAL;
+    }
+}
+
 void *colo_process_incoming_thread(void *opaque)
 {
     MigrationIncomingState *mis = opaque;
@@ -98,7 +245,48 @@ void *colo_process_incoming_thread(void *opaque)
         error_report("colo incoming thread: Open QEMUFile to_src_file failed");
         goto out;
     }
-    /* TODO: COLO checkpoint restore loop */
+
+    ret = colo_ctl_put(mis->to_src_file, COLO_COMMAND_CHECKPOINT_READY, 0);
+    if (ret < 0) {
+        goto out;
+    }
+
+    while (mis->state == MIGRATION_STATUS_COLO) {
+        int request = 0;
+        int ret = colo_wait_handle_cmd(mis->from_src_file, &request);
+
+        if (ret < 0) {
+            break;
+        } else {
+            if (!request) {
+                continue;
+            }
+        }
+
+        ret = colo_ctl_put(mis->to_src_file, COLO_COMMAND_CHECKPOINT_REPLY, 0);
+        if (ret < 0) {
+            goto out;
+        }
+
+        ret = colo_ctl_get(mis->from_src_file, COLO_COMMAND_VMSTATE_SEND);
+        if (ret < 0) {
+            goto out;
+        }
+
+        /* TODO: read migration data into colo buffer */
+
+        ret = colo_ctl_put(mis->to_src_file, COLO_COMMAND_VMSTATE_RECEIVED, 0);
+        if (ret < 0) {
+            goto out;
+        }
+
+        /* TODO: load vm state */
+
+        ret = colo_ctl_put(mis->to_src_file, COLO_COMMAND_VMSTATE_LOADED, 0);
+        if (ret < 0) {
+            goto out;
+        }
+    }
 
 out:
     if (ret < 0) {
