@@ -3508,6 +3508,31 @@ void bdrv_unref(BlockDriverState *bs)
     }
 }
 
+typedef struct {
+    QEMUBH *bh;
+    BlockDriverState *bs;
+} BDRVPutRefBH;
+
+static void bdrv_put_ref_bh(void *opaque)
+{
+    BDRVPutRefBH *s = opaque;
+
+    bdrv_unref(s->bs);
+    qemu_bh_delete(s->bh);
+    g_free(s);
+}
+
+/* Release a BDS reference in a BH */
+void bdrv_put_ref_bh_schedule(BlockDriverState *bs)
+{
+    BDRVPutRefBH *s;
+
+    s = g_new(BDRVPutRefBH, 1);
+    s->bh = qemu_bh_new(bdrv_put_ref_bh, s);
+    s->bs = bs;
+    qemu_bh_schedule(s->bh);
+}
+
 struct BdrvOpBlocker {
     Error *reason;
     QLIST_ENTRY(BdrvOpBlocker) list;
