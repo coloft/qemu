@@ -2089,7 +2089,7 @@ void bdrv_swap(BlockDriverState *bs_new, BlockDriverState *bs_old)
     }
 
     /* bs_new must be unattached and shouldn't have anything fancy enabled */
-    assert(!bs_new->blk);
+    assert(!blk_is_attached(bs_new->blk));
     assert(QLIST_EMPTY(&bs_new->dirty_bitmaps));
     assert(bs_new->job == NULL);
     assert(bs_new->io_limits_enabled == false);
@@ -2106,7 +2106,7 @@ void bdrv_swap(BlockDriverState *bs_new, BlockDriverState *bs_old)
     bdrv_move_feature_fields(bs_new, &tmp);
 
     /* bs_new must remain unattached */
-    assert(!bs_new->blk);
+    assert(!blk_is_attached(bs_new->blk));
 
     /* Check a few fields that should remain attached to the device */
     assert(bs_new->job == NULL);
