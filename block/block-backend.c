@@ -344,6 +344,30 @@ void *blk_get_attached_dev(BlockBackend *blk)
 }
 
 /*
+ * Disable to attach a device mode to @blk.
+ * Return 0 on success, -EBUSY when a device model is attached already.
+ */
+int blk_disable_attach_dev(BlockBackend *blk)
+{
+    if (blk->dev) {
+        return blk->dev == (void *)-1 ? 0 : -EBUSY;
+    }
+
+    blk->dev = (void *)-1;
+    return 0;
+}
+
+/*
+ * Enable to attach a device mode to @blk.
+ */
+void blk_enable_attach_dev(BlockBackend *blk)
+{
+    if (blk->dev == (void *)-1) {
+        blk->dev = NULL;
+    }
+}
+
+/*
  * Set @blk's device model callbacks to @ops.
  * @opaque is the opaque argument to pass to the callbacks.
  * This is for use by device models.

@@ -80,6 +80,8 @@ int blk_attach_dev(BlockBackend *blk, void *dev);
 void blk_attach_dev_nofail(BlockBackend *blk, void *dev);
 void blk_detach_dev(BlockBackend *blk, void *dev);
 void *blk_get_attached_dev(BlockBackend *blk);
+int blk_disable_attach_dev(BlockBackend *blk);
+void blk_enable_attach_dev(BlockBackend *blk);
 void blk_set_dev_ops(BlockBackend *blk, const BlockDevOps *ops, void *opaque);
 int blk_read(BlockBackend *blk, int64_t sector_num, uint8_t *buf,
              int nb_sectors);
