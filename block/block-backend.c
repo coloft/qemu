@@ -368,6 +368,15 @@ void blk_enable_attach_dev(BlockBackend *blk)
 }
 
 /*
+ * Return true if a device model is attached to @blk already,
+ * otherwise, return false.
+ */
+bool blk_is_attached(BlockBackend *blk)
+{
+    return blk != NULL && blk->dev != NULL && blk->dev != (void *)-1;
+}
+
+/*
  * Set @blk's device model callbacks to @ops.
  * @opaque is the opaque argument to pass to the callbacks.
  * This is for use by device models.
