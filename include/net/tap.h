@@ -29,6 +29,23 @@
 #include "qemu-common.h"
 #include "qapi-types.h"
 #include "standard-headers/linux/virtio_net.h"
+#include "net/net.h"
+#include "net/vhost_net.h"
+
+typedef struct TAPState {
+    NetClientState nc;
+    int fd;
+    char down_script[1024];
+    char down_script_arg[128];
+    uint8_t buf[NET_BUFSIZE];
+    bool read_poll;
+    bool write_poll;
+    bool using_vnet_hdr;
+    bool has_ufo;
+    bool enabled;
+    VHostNetState *vhost_net;
+    unsigned host_vnet_hdr_len;
+} TAPState;
 
 int tap_enable(NetClientState *nc);
 int tap_disable(NetClientState *nc);

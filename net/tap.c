@@ -43,23 +43,6 @@
 #include "net/tap.h"
 #include "net/colo-nic.h"
 
-#include "net/vhost_net.h"
-
-typedef struct TAPState {
-    NetClientState nc;
-    int fd;
-    char down_script[1024];
-    char down_script_arg[128];
-    uint8_t buf[NET_BUFSIZE];
-    bool read_poll;
-    bool write_poll;
-    bool using_vnet_hdr;
-    bool has_ufo;
-    bool enabled;
-    VHostNetState *vhost_net;
-    unsigned host_vnet_hdr_len;
-} TAPState;
-
 static void tap_send(void *opaque);
 static void tap_writable(void *opaque);
 
