@@ -38,4 +38,6 @@ int tap_get_fd(NetClientState *nc);
 struct vhost_net;
 struct vhost_net *tap_get_vhost_net(NetClientState *nc);
 
+void launch_script(char *const args[], int fd, Error **errp);
+
 #endif /* QEMU_NET_TAP_H */
