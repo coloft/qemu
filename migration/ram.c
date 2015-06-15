@@ -1663,6 +1663,7 @@ static int ram_load(QEMUFile *f, void *opaque, int version_id)
 int create_and_init_ram_cache(void)
 {
     RAMBlock *block;
+    int64_t ram_cache_pages = last_ram_offset() >> TARGET_PAGE_BITS;
 
     rcu_read_lock();
     QLIST_FOREACH_RCU(block, &ram_list.blocks, next) {
@@ -1674,6 +1675,15 @@ int create_and_init_ram_cache(void)
     }
     rcu_read_unlock();
     ram_cache_enable = true;
+    /*
+    * Start dirty log for Secondary VM, we use this dirty bitmap together with
+    * VM's cache RAM dirty bitmap to decide which page in cache should be
+    * flushed into VM's RAM.
+    */
+    migration_bitmap = bitmap_new(ram_cache_pages);
+    migration_dirty_pages = 0;
+    memory_global_dirty_log_start();
+
     return 0;
 
 out_locked:
@@ -1693,6 +1703,12 @@ void release_ram_cache(void)
     RAMBlock *block;
 
     ram_cache_enable = false;
+
+    if (migration_bitmap) {
+        memory_global_dirty_log_stop();
+        g_free(migration_bitmap);
+        migration_bitmap = NULL;
+    }
 
     rcu_read_lock();
     QLIST_FOREACH_RCU(block, &ram_list.blocks, next) {
