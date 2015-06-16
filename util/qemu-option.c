@@ -1021,6 +1021,50 @@ void qemu_opts_absorb_qdict(QemuOpts *opts, QDict *qdict, Error **errp)
 }
 
 /*
+ * Adds all QDict entries to the QemuOpts that can be added and removes them
+ * from the QDict. The key starts with "%index." in the %qdict. When this
+ * function returns, the QDict contains only those entries that couldn't be
+ * added to the QemuOpts.
+ */
+void qemu_opts_absorb_qdict_by_index(QemuOpts *opts, QDict *qdict,
+                                     const char *index, Error **errp)
+{
+    const QDictEntry *entry, *next;
+    const char *key;
+    int len = strlen(index);
+
+    entry = qdict_first(qdict);
+
+    while (entry != NULL) {
+        Error *local_err = NULL;
+        OptsFromQDictState state = {
+            .errp = &local_err,
+            .opts = opts,
+        };
+
+        next = qdict_next(qdict, entry);
+        if (strncmp(entry->key, index, len) || *(entry->key + len) != '.') {
+            entry = next;
+            continue;
+        }
+
+        key = entry->key + len + 1;
+
+        if (find_desc_by_name(opts->list->desc, key)) {
+            qemu_opts_from_qdict_1(key, entry->value, &state);
+            if (local_err) {
+                error_propagate(errp, local_err);
+                return;
+            } else {
+                qdict_del(qdict, entry->key);
+            }
+        }
+
+        entry = next;
+    }
+}
+
+/*
  * Convert from QemuOpts to QDict.
  * The QDict values are of type QString.
  * TODO We'll want to use types appropriate for opt->desc->type, but
