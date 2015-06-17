@@ -255,6 +255,21 @@
   'data': {'status': 'MigrationStatus'}}
 
 ##
+# @COLO_EXIT
+#
+# Emitted when VM finish COLO mode due to some errors happening or
+# the request of users.
+#
+# @mode: 'primary' or 'secondeary'.
+#
+# @error:  #optional, error message. Only present on error happening.
+#
+# Since: 2.4
+##
+{ 'event': 'COLO_EXIT',
+  'data': {'mode': 'str', '*error':'str'}}
+
+##
 # @ACPI_DEVICE_OST
 #
 # Emitted when guest executes ACPI _OST method.
