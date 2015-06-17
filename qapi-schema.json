@@ -751,6 +751,22 @@
   'data': [ 'unknown', 'primary', 'secondary'] }
 
 ##
+# @COLOExitReason
+#
+# The reason of COLO exit
+#
+# @unknow: unknown reason
+#
+# @request: COLO exit is due to an external request
+#
+# @error: COLO exit is due to an internal error
+#
+# Since: 2.5
+##
+{ 'enum': 'COLOExitReason',
+  'data': [ 'unknown', 'request', 'error'] }
+
+##
 # @x-colo-lost-heartbeat
 #
 # Tell qemu that heartbeat is lost, request it to do takeover procedures.
