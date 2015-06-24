@@ -4251,3 +4251,42 @@ BlockAcctStats *bdrv_get_stats(BlockDriverState *bs)
 {
     return &bs->stats;
 }
+
+/*
+ * Hot add/remove a BDS's child. So the user can take a child offline when
+ * it is broken and take a new child online
+ */
+void bdrv_add_child(BlockDriverState *bs, QDict *options, Error **errp)
+{
+
+    if (!bs->drv || !bs->drv->bdrv_add_child) {
+        error_setg(errp, "this feature or command is not currently supported");
+        return;
+    }
+
+    bs->drv->bdrv_add_child(bs, options, errp);
+}
+
+void bdrv_del_child(BlockDriverState *bs, BlockDriverState *child_bs,
+                    Error **errp)
+{
+    BdrvChild *child;
+
+    if (!bs->drv || !bs->drv->bdrv_del_child) {
+        error_setg(errp, "this feature or command is not currently supported");
+        return;
+    }
+
+    QLIST_FOREACH(child, &bs->children, next) {
+        if (child->bs == child_bs) {
+            break;
+        }
+    }
+
+    if (!child) {
+        error_setg(errp, "Invalid child");
+        return;
+    }
+
+    bs->drv->bdrv_del_child(bs, child_bs, errp);
+}
