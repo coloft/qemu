@@ -2186,6 +2186,59 @@ void hmp_drive_del(Monitor *mon, const QDict *qdict)
     aio_context_release(aio_context);
 }
 
+void hmp_child_add(Monitor *mon, const QDict *qdict)
+{
+    const char *id = qdict_get_str(qdict, "id");
+    const char *optstr = qdict_get_str(qdict, "opts");
+    QemuOpts *opts;
+    QDict *bs_opts = qdict_new();
+    BlockDriverState *bs;
+    Error *local_err = NULL;
+
+    opts = drive_def(optstr);
+    if (!opts) {
+        /* We have reported error in drive_def */
+        return;
+    }
+    bs_opts = qemu_opts_to_qdict(opts, bs_opts);
+
+    bs = bdrv_lookup_bs(id, id, &local_err);
+    if (!bs) {
+        error_report_err(local_err);
+        return;
+    }
+
+    bdrv_add_child(bs, bs_opts, &local_err);
+    if (local_err) {
+        error_report_err(local_err);
+    }
+}
+
+void hmp_child_del(Monitor *mon, const QDict *qdict)
+{
+    const char *id = qdict_get_str(qdict, "id");
+    const char *child_id = qdict_get_str(qdict, "child");
+    BlockDriverState *bs, *child_bs;
+    Error *local_err = NULL;
+
+    bs = bdrv_lookup_bs(id, id, &local_err);
+    if (!bs) {
+        error_report_err(local_err);
+        return;
+    }
+
+    child_bs = bdrv_lookup_bs(child_id, child_id, &local_err);
+    if (!child_bs) {
+        error_report_err(local_err);
+        return;
+    }
+
+    bdrv_del_child(bs, child_bs, &local_err);
+    if (local_err) {
+        error_report_err(local_err);
+    }
+}
+
 void qmp_block_resize(bool has_device, const char *device,
                       bool has_node_name, const char *node_name,
                       int64_t size, Error **errp)
