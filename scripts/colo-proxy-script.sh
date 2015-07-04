@@ -9,8 +9,6 @@ action=$2
 phy_if=$3
 virt_if=$4
 index=$5
-br=br1
-failover_br=br0
 
 script_usage()
 {
@@ -52,9 +50,66 @@ primary_uninstall()
     /usr/local/sbin/arptables -D INPUT -i $phy_if -j MARK --set-mark $index
 }
 
+attach_forward_bridge()
+{
+    if brctl show |grep -q colobr ; then
+        colobr=`brctl show | grep colobr | awk '{print $1}' |tail -1`
+        if brctl show $colobr |grep -qw $phy_if ; then
+            ip link set $colobr up
+            brctl addif $colobr $virt_if
+            return 0
+        fi
+        for (( i=0; i<100; i++))
+        do
+            if [ "$colobr" == "colobr$i" ]; then
+                colobr=colobr$((i+1))
+                break
+            fi
+        done
+        if [ $i -eq 100 ]; then
+            echo "there are to many colobr"
+            colobr=
+            exit 1
+        fi
+    else
+        colobr=colobr0
+    fi
+
+    brctl addbr $colobr
+    ip link set dev $colobr up
+    brctl addif $colobr $phy_if
+    brctl addif $colobr $virt_if
+}
+
+detach_forward_bridge()
+{
+
+    bridges="`brctl show | grep -v -e 'bridge name' -e ^$'\t' |\
+            awk -F'\t' '{print $1}'`"
+    for bridge in $bridges
+    do
+        if brctl show $bridge |grep -qw $virt_if ; then
+                colobr=$bridge
+        fi
+    done
+
+    if [ "X$colobr" == "X" ]; then
+        return
+    fi
+    brctl delif $colobr $virt_if
+    has_slave=`brctl show $colobr |wc -l`
+    if [ $has_slave -ne 2 ]; then
+        return 0
+    fi
+
+    brctl delif $colobr $phy_if
+    ip link set $colobr down
+    brctl delbr $colobr
+}
+
 secondary_install()
 {
-    brctl addif $br $phy_if
+    attach_forward_bridge
 
     /usr/local/sbin/iptables -t mangle -I PREROUTING -m physdev --physdev-in \
         $virt_if -j SECCOLO --index $index
@@ -64,9 +119,7 @@ secondary_install()
 
 secondary_uninstall()
 {
-    brctl delif $br $phy_if
-    brctl delif $br $virt_if
-    brctl addif $failover_br $virt_if
+    detach_forward_bridge
 
     /usr/local/sbin/iptables -t mangle -D PREROUTING -m physdev --physdev-in \
         $virt_if -j SECCOLO --index $index

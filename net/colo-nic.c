@@ -58,17 +58,67 @@ static int launch_colo_script(COLONicState *cns, bool up, int side, int index)
     return 0;
 }
 
+/* For secondary VM, we need to cleanup its original configure
+ * when go into COLO state, when exit from COLO state, we need to
+ * resume its old configure
+*/
+static int handle_old_nic_configure(COLONicState *cns, int fd, bool cleanup)
+{
+    Error *err = NULL;
+    char *args[3];
+    char **parg;
+
+    parg = args;
+    *parg++ = cleanup ? cns->qemu_ifdown : (char *)cns->qemu_ifup;
+    *parg++ = (char *)cns->ifname;
+    *parg = NULL;
+    launch_script(args, fd, &err);
+    if (err) {
+        error_report_err(err);
+        return -1;
+    }
+    return 0;
+}
+
 QTAILQ_HEAD(, nic_device) nic_devices = QTAILQ_HEAD_INITIALIZER(nic_devices);
 
 static int colo_nic_configure(COLONicState *cns,
             bool up, int side, int index)
 {
+    NetClientState *nc = container_of(cns, NetClientState, cns);
+    TAPState *s = DO_UPCAST(TAPState, nc, nc);
+
     if (!cns && index <= 0) {
         error_report("Can not parse colo_script or forward_nic");
         return -1;
     }
 
-    return launch_colo_script(cns, up, side, index);
+    switch (side) {
+    case COLO_MODE_PRIMARY:
+        return launch_colo_script(cns, up, side, index);
+        break;
+    case COLO_MODE_SECONDARY:
+        if (!cns->qemu_ifup[0] || !cns->qemu_ifdown || !cns->qemu_ifdown[0]) {
+            error_report("ifup(e.g. /etc/qemu-ifup) and ifdown(e.g."
+                         "/etc/qemu-ifdown)script are needed for COLO");
+            return -1;
+        }
+        if (up) {
+            if (handle_old_nic_configure(cns, s->fd, true) < 0) {
+                return -1;
+            }
+            return launch_colo_script(cns, up, side, index);
+        } else {
+            if (launch_colo_script(cns, up, side, index) < 0) {
+                return -1;
+            }
+            return handle_old_nic_configure(cns, s->fd, false);
+        }
+        break;
+    default:
+        break;
+    }
+    return -1;
 }
 
 void colo_add_nic_devices(COLONicState *cns)

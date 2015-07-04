@@ -644,6 +644,10 @@ static void net_init_tap_one(const NetdevTapOptions *tap, NetClientState *peer,
             snprintf(s->down_script, sizeof(s->down_script), "%s", downscript);
             snprintf(s->down_script_arg, sizeof(s->down_script_arg),
                      "%s", ifname);
+            nc->cns.qemu_ifdown = s->down_script;
+        }
+        if (strcmp(script, "no") != 0) {
+            strcpy(nc->cns.qemu_ifup, script);
         }
     }
 

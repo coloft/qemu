@@ -20,6 +20,8 @@ typedef struct COLONicState {
     char nicname[128]; /* forward dev */
     char script[1024]; /* colo script */
     char ifname[128];  /* e.g. tap name */
+    char qemu_ifup[1024]; /* script that setup nic, e.g. /etc/qemu-ifup */
+    char *qemu_ifdown; /* script that cleanup nic e.g. /etc/qemu-ifdown */
 } COLONicState;
 
 void colo_add_nic_devices(COLONicState *cns);
