@@ -1502,6 +1502,7 @@ rdma_start_outgoing_migration_after_rdma_source_init(void) ""
 colo_vm_state_change(const char *old, const char *new) "Change '%s' => '%s'"
 colo_ctl_put(const char *msg, uint64_t value) "Send '%s' cmd, value: %" PRIu64""
 colo_ctl_get(const char *msg) "Receive '%s' cmd"
+colo_failover_set_state(int new_state) "new state %d"
 
 # kvm-all.c
 kvm_ioctl(int type, void *arg) "type 0x%x, arg %p"
