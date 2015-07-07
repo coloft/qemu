@@ -227,6 +227,8 @@ static void *colo_thread(void *opaque)
     QEMUFile *colo_control = NULL;
     int ret;
 
+    failover_init_state();
+
     colo_control = qemu_fopen_socket(qemu_get_fd(s->file), "rb");
     if (!colo_control) {
         error_report("Open colo_control failed!");
@@ -339,6 +341,7 @@ void *colo_process_incoming_checkpoints(void *opaque)
 
     migrate_set_state(&mis->state, MIGRATION_STATUS_ACTIVE,
                       MIGRATION_STATUS_COLO);
+    failover_init_state();
 
     ctl = qemu_fopen_socket(fd, "wb");
     if (!ctl) {
