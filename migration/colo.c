@@ -197,6 +197,8 @@ static void *colo_thread(void *opaque)
     int64_t current_time, checkpoint_time = qemu_clock_get_ms(QEMU_CLOCK_HOST);
     int fd, ret = 0;
 
+    failover_init_state();
+
     /* Dup the fd of to_dst_file */
     fd = dup(qemu_get_fd(s->to_dst_file));
     if (fd == -1) {
@@ -335,6 +337,8 @@ void *colo_process_incoming_thread(void *opaque)
 
     migrate_set_state(&mis->state, MIGRATION_STATUS_ACTIVE,
                       MIGRATION_STATUS_COLO);
+
+    failover_init_state();
 
     fd = dup(qemu_get_fd(mis->from_src_file));
     if (fd < 0) {
