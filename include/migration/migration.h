@@ -43,6 +43,19 @@ struct MigrationParams {
     bool shared;
 };
 
+typedef struct COLOCheckpointState COLOCheckpointState;
+struct COLOCheckpointState {
+    int64_t checkpoint_count;
+    int64_t proxy_discompare_count;
+    int64_t periodic_checkpoint_count;
+
+    int64_t total_downtime;
+    int64_t max_downtime;
+    int64_t min_downtime;
+
+    int state;
+};
+
 typedef struct MigrationState MigrationState;
 
 typedef QLIST_HEAD(, LoadStateEntry) LoadStateEntry_Head;
@@ -96,6 +109,7 @@ struct MigrationState
     int64_t dirty_sync_count;
 
     COLOState colo_state;
+    COLOCheckpointState checkpoint_state;
 };
 
 void migrate_set_state(int *state, int old_state, int new_state);
