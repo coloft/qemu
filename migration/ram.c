@@ -1522,7 +1522,6 @@ static int ram_load(QEMUFile *f, void *opaque, int version_id)
     int flags = 0, ret = 0;
     static uint64_t seq_iter;
     int len = 0;
-    bool need_flush = false;
 
     seq_iter++;
 
@@ -1592,7 +1591,6 @@ static int ram_load(QEMUFile *f, void *opaque, int version_id)
                 break;
             }
 
-            need_flush = true;
             ch = qemu_get_byte(f);
             ram_handle_compressed(host, ch, TARGET_PAGE_SIZE);
             break;
@@ -1604,7 +1602,6 @@ static int ram_load(QEMUFile *f, void *opaque, int version_id)
                 break;
             }
 
-            need_flush = true;
             qemu_get_buffer(f, host, TARGET_PAGE_SIZE);
             break;
         case RAM_SAVE_FLAG_COMPRESS_PAGE:
@@ -1637,7 +1634,6 @@ static int ram_load(QEMUFile *f, void *opaque, int version_id)
                 ret = -EINVAL;
                 break;
             }
-            need_flush = true;
             break;
         case RAM_SAVE_FLAG_EOS:
             /* normal exit */
@@ -1658,10 +1654,6 @@ static int ram_load(QEMUFile *f, void *opaque, int version_id)
 
     rcu_read_unlock();
 
-    if (!ret  && ram_cache_enable && need_flush) {
-        DPRINTF("Flush ram_cache\n");
-        colo_flush_ram_cache();
-    }
     DPRINTF("Completed load of VM with exit code %d seq iteration "
             "%" PRIu64 "\n", ret, seq_iter);
     return ret;
