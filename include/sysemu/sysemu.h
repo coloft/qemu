@@ -94,7 +94,12 @@ int qemu_savevm_state_iterate(QEMUFile *f);
 void qemu_savevm_state_complete(QEMUFile *f);
 void qemu_savevm_state_cancel(void);
 uint64_t qemu_savevm_state_pending(QEMUFile *f, uint64_t max_size);
+int qemu_save_ram_state(QEMUFile *f);
+int qemu_save_device_state(QEMUFile *f);
 int qemu_loadvm_state(QEMUFile *f);
+int qemu_loadvm_state_begin(QEMUFile *f);
+int qemu_load_ram_state(QEMUFile *f);
+int qemu_load_device_state(QEMUFile *f);
 
 typedef enum DisplayType
 {
