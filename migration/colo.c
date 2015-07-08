@@ -256,15 +256,6 @@ static int colo_do_checkpoint_transaction(MigrationState *s,
     if (ret < 0) {
         goto out;
     }
-    /* Disable block migration */
-    s->params.blk = 0;
-    s->params.shared = 0;
-    qemu_savevm_state_begin(s->to_dst_file, &s->params);
-    ret = qemu_file_get_error(s->to_dst_file);
-    if (ret < 0) {
-        error_report("save vm state begin error\n");
-        goto out;
-    }
 
     qemu_mutex_lock_iothread();
     /* Note: device state is saved into buffer */
@@ -326,6 +317,21 @@ out:
     return ret;
 }
 
+static int colo_prepare_before_save(MigrationState *s)
+{
+    int ret;
+    /* Disable block migration */
+    s->params.blk = 0;
+    s->params.shared = 0;
+    qemu_savevm_state_begin(s->to_dst_file, &s->params);
+    ret = qemu_file_get_error(s->to_dst_file);
+    if (ret < 0) {
+        error_report("save vm state begin error\n");
+        return ret;
+    }
+    return 0;
+}
+
 static void *colo_thread(void *opaque)
 {
     MigrationState *s = opaque;
@@ -346,6 +352,11 @@ static void *colo_thread(void *opaque)
     if (!s->from_dst_file) {
         ret = -EINVAL;
         error_report("Open QEMUFile failed!");
+        goto out;
+    }
+
+    ret = colo_prepare_before_save(s);
+    if (ret < 0) {
         goto out;
     }
 
@@ -507,6 +518,18 @@ static int colo_wait_handle_cmd(QEMUFile *f, int *checkpoint_request)
     }
 }
 
+static int colo_prepare_before_load(QEMUFile *f)
+{
+    int ret;
+
+    ret = qemu_loadvm_state_begin(f);
+    if (ret < 0) {
+        error_report("load vm state begin error, ret=%d", ret);
+        return ret;
+    }
+    return 0;
+}
+
 void *colo_process_incoming_thread(void *opaque)
 {
     MigrationIncomingState *mis = opaque;
@@ -545,6 +568,11 @@ void *colo_process_incoming_thread(void *opaque)
         goto out;
     }
 
+    ret = colo_prepare_before_load(mis->from_src_file);
+    if (ret < 0) {
+        goto out;
+    }
+
     ret = colo_ctl_put(mis->to_src_file, COLO_CMD_CHECKPOINT_READY, 0);
     if (ret < 0) {
         goto out;
@@ -577,11 +605,6 @@ void *colo_process_incoming_thread(void *opaque)
             goto out;
         }
 
-        ret = qemu_loadvm_state_begin(mis->from_src_file);
-        if (ret < 0) {
-            error_report("load vm state begin error, ret=%d", ret);
-            goto out;
-        }
         ret = qemu_load_ram_state(mis->from_src_file);
         if (ret < 0) {
             error_report("load ram state error");
