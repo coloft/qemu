@@ -176,10 +176,6 @@ static void primary_vm_do_failover(void)
     int old_state;
     Error *local_err = NULL;
 
-    if (!colo_runstate_is_stopped()) {
-        vm_stop_force_state(RUN_STATE_COLO);
-    }
-
     colo_proxy_destroy(COLO_MODE_PRIMARY);
 
     if (s->state != MIGRATION_STATUS_FAILED) {
