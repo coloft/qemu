@@ -1767,61 +1767,55 @@ ram_addr_t host_bitmap_find_and_reset_dirty(MemoryRegion *mr,
 /*
 * Flush content of RAM cache into SVM's memory.
 * Only flush the pages that be dirtied by PVM or SVM or both.
+* TODO: option walk optimization:
+*   1. bitmap = host_bitmap | migration_bitmap
+*   2. walk bitmap and find offset
+*   3. memcpy
 */
 void colo_flush_ram_cache(void)
 {
     RAMBlock *block = NULL;
     void *dst_host;
     void *src_host;
-    ram_addr_t ca  = 0, ha = 0;
-    bool got_ca = 0, got_ha = 0;
+    ram_addr_t cache_offset = 0, host_offset = 0, offset = 0;
     int64_t host_dirty = 0, both_dirty = 0;
 
     address_space_sync_dirty_bitmap(&address_space_memory);
     rcu_read_lock();
     block = QLIST_FIRST_RCU(&ram_list.blocks);
-    while (true) {
-        if (ca < block->used_length && ca <= ha) {
-            ca = migration_bitmap_find_and_reset_dirty(block->mr, ca);
-            if (ca < block->used_length) {
-                got_ca = 1;
-            }
+    while (block) {
+        if (offset == cache_offset) {
+            cache_offset =
+                migration_bitmap_find_and_reset_dirty(block->mr, cache_offset);
         }
-        if (ha < block->used_length && ha <= ca) {
-            ha = host_bitmap_find_and_reset_dirty(block->mr, ha);
-            if (ha < block->used_length && ha != ca) {
-                got_ha = 1;
-            }
-            host_dirty += (ha < block->used_length ? 1 : 0);
-            both_dirty += (ha < block->used_length && ha == ca ? 1 : 0);
+        if (offset == host_offset) {
+            host_offset =
+                host_bitmap_find_and_reset_dirty(block->mr, host_offset);
         }
-        if (ca >= block->used_length && ha >= block->used_length) {
-            ca = 0;
-            ha = 0;
+
+        if (cache_offset >= block->used_length &&
+            host_offset >= block->used_length) {
+            offset = host_offset = cache_offset = 0;
             block = QLIST_NEXT_RCU(block, next);
-            if (!block) {
-                break;
-            }
         } else {
-            if (got_ha) {
-                got_ha = 0;
-                dst_host = memory_region_get_ram_ptr(block->mr) + ha;
-                src_host = memory_region_get_ram_cache_ptr(block->mr, block)
-                           + ha;
-                memcpy(dst_host, src_host, TARGET_PAGE_SIZE);
+            if (host_offset <= cache_offset) {
+                offset = host_offset;
+                host_dirty++;
+                both_dirty += (host_offset == cache_offset);
+            } else {
+                offset = cache_offset;
             }
-            if (got_ca) {
-                got_ca = 0;
-                dst_host = memory_region_get_ram_ptr(block->mr) + ca;
-                src_host = memory_region_get_ram_cache_ptr(block->mr, block)
-                           + ca;
-                memcpy(dst_host, src_host, TARGET_PAGE_SIZE);
-            }
+
+            dst_host = memory_region_get_ram_ptr(block->mr) + offset;
+            src_host = memory_region_get_ram_cache_ptr(block->mr, block)
+                       + offset;
+            memcpy(dst_host, src_host, TARGET_PAGE_SIZE);
         }
     }
     rcu_read_unlock();
     assert(migration_dirty_pages == 0);
 }
+
 
 static SaveVMHandlers savevm_ram_handlers = {
     .save_live_setup = ram_save_setup,
