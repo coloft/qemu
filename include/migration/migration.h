@@ -50,6 +50,7 @@ typedef QLIST_HEAD(, LoadStateEntry) LoadStateEntry_Head;
 struct MigrationIncomingState {
     QEMUFile *file;
 
+    int state;
     /* See savevm.c */
     LoadStateEntry_Head loadvm_handlers;
 };
@@ -81,6 +82,8 @@ struct MigrationState
     int64_t setup_time;
     int64_t dirty_sync_count;
 };
+
+void migrate_set_state(int *state, int old_state, int new_state);
 
 void process_incoming_migration(QEMUFile *f);
 
