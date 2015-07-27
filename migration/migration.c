@@ -97,6 +97,7 @@ MigrationIncomingState *migration_incoming_state_new(QEMUFile* f)
 {
     mis_current = g_new0(MigrationIncomingState, 1);
     mis_current->file = f;
+    mis_current->state = MIGRATION_STATUS_NONE;
     QLIST_INIT(&mis_current->loadvm_handlers);
 
     return mis_current;
@@ -278,11 +279,13 @@ void qemu_start_incoming_migration(const char *uri, Error **errp)
 static void process_incoming_migration_co(void *opaque)
 {
     QEMUFile *f = opaque;
+    MigrationIncomingState *mis;
     Error *local_err = NULL;
     int ret;
 
-    migration_incoming_state_new(f);
-    migrate_generate_event(MIGRATION_STATUS_ACTIVE);
+    mis = migration_incoming_state_new(f);
+    migrate_set_state(&mis->state, MIGRATION_STATUS_NONE,
+                      MIGRATION_STATUS_ACTIVE);
     ret = qemu_loadvm_state(f);
 
     qemu_fclose(f);
@@ -290,7 +293,8 @@ static void process_incoming_migration_co(void *opaque)
     migration_incoming_state_destroy();
 
     if (ret < 0) {
-        migrate_generate_event(MIGRATION_STATUS_FAILED);
+        migrate_set_state(&mis->state, MIGRATION_STATUS_ACTIVE,
+                          MIGRATION_STATUS_FAILED);
         error_report("load of migration failed: %s", strerror(-ret));
         migrate_decompress_threads_join();
         exit(EXIT_FAILURE);
@@ -299,7 +303,8 @@ static void process_incoming_migration_co(void *opaque)
     /* Make sure all file formats flush their mutable metadata */
     bdrv_invalidate_cache_all(&local_err);
     if (local_err) {
-        migrate_generate_event(MIGRATION_STATUS_FAILED);
+        migrate_set_state(&mis->state, MIGRATION_STATUS_ACTIVE,
+                          MIGRATION_STATUS_FAILED);
         error_report_err(local_err);
         migrate_decompress_threads_join();
         exit(EXIT_FAILURE);
@@ -331,7 +336,8 @@ static void process_incoming_migration_co(void *opaque)
      * observer sees this event they might start to prod at the VM assuming
      * it's ready to use.
      */
-    migrate_generate_event(MIGRATION_STATUS_COMPLETED);
+    migrate_set_state(&mis->state, MIGRATION_STATUS_ACTIVE,
+                      MIGRATION_STATUS_COMPLETED);
 }
 
 void process_incoming_migration(QEMUFile *f)
@@ -596,9 +602,9 @@ void qmp_migrate_set_parameters(bool has_compress_level,
 
 /* shared migration helpers */
 
-static void migrate_set_state(MigrationState *s, int old_state, int new_state)
+void migrate_set_state(int *state, int old_state, int new_state)
 {
-    if (atomic_cmpxchg(&s->state, old_state, new_state) == old_state) {
+    if (atomic_cmpxchg(state, old_state, new_state) == old_state) {
         trace_migrate_set_state(new_state);
         migrate_generate_event(new_state);
     }
@@ -627,7 +633,7 @@ static void migrate_fd_cleanup(void *opaque)
     if (s->state != MIGRATION_STATUS_COMPLETED) {
         qemu_savevm_state_cancel();
         if (s->state == MIGRATION_STATUS_CANCELLING) {
-            migrate_set_state(s, MIGRATION_STATUS_CANCELLING,
+            migrate_set_state(&s->state, MIGRATION_STATUS_CANCELLING,
                               MIGRATION_STATUS_CANCELLED);
         }
     }
@@ -639,7 +645,8 @@ void migrate_fd_error(MigrationState *s)
 {
     trace_migrate_fd_error();
     assert(s->file == NULL);
-    migrate_set_state(s, MIGRATION_STATUS_SETUP, MIGRATION_STATUS_FAILED);
+    migrate_set_state(&s->state, MIGRATION_STATUS_SETUP,
+                      MIGRATION_STATUS_FAILED);
     notifier_list_notify(&migration_state_notifiers, s);
 }
 
@@ -655,7 +662,7 @@ static void migrate_fd_cancel(MigrationState *s)
             old_state != MIGRATION_STATUS_ACTIVE) {
             break;
         }
-        migrate_set_state(s, old_state, MIGRATION_STATUS_CANCELLING);
+        migrate_set_state(&s->state, old_state, MIGRATION_STATUS_CANCELLING);
     } while (s->state != MIGRATION_STATUS_CANCELLING);
 
     /*
@@ -731,7 +738,7 @@ static MigrationState *migrate_init(const MigrationParams *params)
     s->parameters[MIGRATION_PARAMETER_X_CPU_THROTTLE_INCREMENT] =
                 x_cpu_throttle_increment;
     s->bandwidth_limit = bandwidth_limit;
-    migrate_set_state(s, MIGRATION_STATUS_NONE, MIGRATION_STATUS_SETUP);
+    migrate_set_state(&s->state, MIGRATION_STATUS_NONE, MIGRATION_STATUS_SETUP);
 
     s->total_time = qemu_clock_get_ms(QEMU_CLOCK_REALTIME);
     return s;
@@ -829,7 +836,8 @@ void qmp_migrate(const char *uri, bool has_blk, bool blk,
     } else {
         error_setg(errp, QERR_INVALID_PARAMETER_VALUE, "uri",
                    "a valid migration protocol");
-        migrate_set_state(s, MIGRATION_STATUS_SETUP, MIGRATION_STATUS_FAILED);
+        migrate_set_state(&s->state, MIGRATION_STATUS_SETUP,
+                          MIGRATION_STATUS_FAILED);
         return;
     }
 
@@ -1022,11 +1030,13 @@ static void migration_completion(MigrationState *s, bool *old_vm_running,
         goto fail;
     }
 
-    migrate_set_state(s, MIGRATION_STATUS_ACTIVE, MIGRATION_STATUS_COMPLETED);
+    migrate_set_state(&s->state, MIGRATION_STATUS_ACTIVE,
+                      MIGRATION_STATUS_COMPLETED);
     return;
 
 fail:
-    migrate_set_state(s, MIGRATION_STATUS_ACTIVE, MIGRATION_STATUS_FAILED);
+    migrate_set_state(&s->state, MIGRATION_STATUS_ACTIVE,
+                      MIGRATION_STATUS_FAILED);
 }
 
 bool migrate_colo_enabled(void)
@@ -1053,7 +1063,8 @@ static void *migration_thread(void *opaque)
     qemu_savevm_state_begin(s->file, &s->params);
 
     s->setup_time = qemu_clock_get_ms(QEMU_CLOCK_HOST) - setup_start;
-    migrate_set_state(s, MIGRATION_STATUS_SETUP, MIGRATION_STATUS_ACTIVE);
+    migrate_set_state(&s->state, MIGRATION_STATUS_SETUP,
+                      MIGRATION_STATUS_ACTIVE);
 
     while (s->state == MIGRATION_STATUS_ACTIVE) {
         int64_t current_time;
@@ -1072,7 +1083,7 @@ static void *migration_thread(void *opaque)
         }
 
         if (qemu_file_get_error(s->file)) {
-            migrate_set_state(s, MIGRATION_STATUS_ACTIVE,
+            migrate_set_state(&s->state, MIGRATION_STATUS_ACTIVE,
                               MIGRATION_STATUS_FAILED);
             break;
         }
