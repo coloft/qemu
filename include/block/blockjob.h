@@ -50,6 +50,9 @@ typedef struct BlockJobDriver {
      * manually.
      */
     void (*complete)(BlockJob *job, Error **errp);
+
+    /** Optional callback for job types that support checkpoint. */
+    void (*do_checkpoint)(BlockJob *job, Error **errp);
 } BlockJobDriver;
 
 /**
@@ -363,5 +366,14 @@ typedef void BlockJobDeferToMainLoopFn(BlockJob *job, void *opaque);
 void block_job_defer_to_main_loop(BlockJob *job,
                                   BlockJobDeferToMainLoopFn *fn,
                                   void *opaque);
+
+/**
+ * block_job_do_checkpoint:
+ * @job: The job.
+ * @errp: Error object.
+ *
+ * Do block checkpoint on the specified job.
+ */
+void block_job_do_checkpoint(BlockJob *job, Error **errp);
 
 #endif
