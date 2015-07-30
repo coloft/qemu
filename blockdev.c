@@ -2209,6 +2209,39 @@ static void do_child_add(const char *device, QDict *opts, Error **errp)
     }
 }
 
+void hmp_child_add(Monitor *mon, const QDict *qdict)
+{
+    const char *id = qdict_get_str(qdict, "id");
+    const char *optstr = qdict_get_str(qdict, "opts");
+    QemuOpts *opts;
+    QDict *bs_opts = qdict_new();
+    Error *local_err = NULL;
+
+    opts = drive_def(optstr);
+    if (!opts) {
+        /* We have reported error in drive_def */
+        return;
+    }
+
+    bs_opts = qemu_opts_to_qdict(opts, bs_opts);
+    do_child_add(id, bs_opts, &local_err);
+    if (local_err) {
+        error_report_err(local_err);
+    }
+}
+
+void hmp_child_del(Monitor *mon, const QDict *qdict)
+{
+    const char *id = qdict_get_str(qdict, "id");
+    const char *child_id = qdict_get_str(qdict, "child");
+    Error *local_err = NULL;
+
+    qmp_child_del(id, child_id, &local_err);
+    if (local_err) {
+        error_report_err(local_err);
+    }
+}
+
 void qmp_block_resize(bool has_device, const char *device,
                       bool has_node_name, const char *node_name,
                       int64_t size, Error **errp)
