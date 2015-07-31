@@ -1383,7 +1383,7 @@
             'dmg', 'file', 'ftp', 'ftps', 'host_cdrom', 'host_device',
             'host_floppy', 'http', 'https', 'null-aio', 'null-co', 'parallels',
             'qcow', 'qcow2', 'qed', 'quorum', 'raw', 'tftp', 'vdi', 'vhdx',
-            'vmdk', 'vpc', 'vvfat' ] }
+            'vmdk', 'vpc', 'vvfat', 'nbd' ] }
 
 ##
 # @BlockdevOptionsBase
@@ -1789,6 +1789,19 @@
             '*read-pattern': 'QuorumReadPattern' } }
 
 ##
+# @BlockdevOptionsNBD
+#
+# Driver specific block device options for NBD
+#
+# @export: #options the NBD export name
+#
+# Since: 2.5
+##
+{ 'struct': 'BlockdevOptionsNBD',
+  'base': 'InetSocketAddress',
+  'data': { '*export': 'str' } }
+
+##
 # @BlockdevOptions
 #
 # Options for creating a block device.
@@ -1815,7 +1828,7 @@
       'http':       'BlockdevOptionsFile',
       'https':      'BlockdevOptionsFile',
 # TODO iscsi: Wait for structured options
-# TODO nbd: Should take InetSocketAddress for 'host'?
+      'nbd':        'BlockdevOptionsNBD',
 # TODO nfs: Wait for structured options
       'null-aio':   'BlockdevOptionsNull',
       'null-co':    'BlockdevOptionsNull',
