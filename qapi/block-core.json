@@ -1810,6 +1810,21 @@
   'data': { '*export': 'str' } }
 
 ##
+# @ReplicationMode
+#
+# An enumeration of replication modes.
+#
+# @unprotected: Replication is not started or after failover.
+#
+# @primary: Primary mode, the vm's state will be sent to secondary QEMU.
+#
+# @secondary: Secondary mode, receive the vm's state from primary QEMU.
+#
+# Since: 2.4
+##
+{ 'enum' : 'ReplicationMode', 'data' : [ 'primary', 'secondary' ] }
+
+##
 # @BlockdevOptions
 #
 # Options for creating a block device.

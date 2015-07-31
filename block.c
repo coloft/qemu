@@ -4390,3 +4390,46 @@ void bdrv_del_child(BlockDriverState *bs, BlockDriverState *child_bs,
 
     bs->drv->bdrv_del_child(bs, child_bs, errp);
 }
+
+void bdrv_start_replication(BlockDriverState *bs, ReplicationMode mode,
+                            Error **errp)
+{
+    BlockDriver *drv = bs->drv;
+
+    if (drv && drv->bdrv_start_replication) {
+        drv->bdrv_start_replication(bs, mode, errp);
+    } else if (bs->file) {
+        bdrv_start_replication(bs->file, mode, errp);
+    } else {
+        error_setg(errp, "The BDS %s doesn't support starting block"
+                   " replication", bs->filename);
+    }
+}
+
+void bdrv_do_checkpoint(BlockDriverState *bs, Error **errp)
+{
+    BlockDriver *drv = bs->drv;
+
+    if (drv && drv->bdrv_do_checkpoint) {
+        drv->bdrv_do_checkpoint(bs, errp);
+    } else if (bs->file) {
+        bdrv_do_checkpoint(bs->file, errp);
+    } else {
+        error_setg(errp, "The BDS %s doesn't support block checkpoint",
+                   bs->filename);
+    }
+}
+
+void bdrv_stop_replication(BlockDriverState *bs, bool failover, Error **errp)
+{
+    BlockDriver *drv = bs->drv;
+
+    if (drv && drv->bdrv_stop_replication) {
+        drv->bdrv_stop_replication(bs, failover, errp);
+    } else if (bs->file) {
+        bdrv_stop_replication(bs->file, failover, errp);
+    } else {
+        error_setg(errp, "The BDS %s doesn't support stopping block"
+                   " replication", bs->filename);
+    }
+}
