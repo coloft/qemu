@@ -1383,7 +1383,7 @@
             'dmg', 'file', 'ftp', 'ftps', 'host_cdrom', 'host_device',
             'host_floppy', 'http', 'https', 'null-aio', 'null-co', 'parallels',
             'qcow', 'qcow2', 'qed', 'quorum', 'raw', 'tftp', 'vdi', 'vhdx',
-            'vmdk', 'vpc', 'vvfat', 'nbd' ] }
+            'vmdk', 'vpc', 'vvfat', 'nbd', 'replication' ] }
 
 ##
 # @BlockdevOptionsBase
@@ -1825,6 +1825,19 @@
 { 'enum' : 'ReplicationMode', 'data' : [ 'primary', 'secondary' ] }
 
 ##
+# @BlockdevOptionsReplication
+#
+# Driver specific block device options for replication
+#
+# @mode: the replication mode
+#
+# Since: 2.5
+##
+{ 'struct': 'BlockdevOptionsReplication',
+  'base': 'BlockdevOptionsGenericFormat',
+  'data': { 'mode': 'ReplicationMode'  } }
+
+##
 # @BlockdevOptions
 #
 # Options for creating a block device.
@@ -1869,7 +1882,8 @@
       'vhdx':       'BlockdevOptionsGenericFormat',
       'vmdk':       'BlockdevOptionsGenericCOWFormat',
       'vpc':        'BlockdevOptionsGenericFormat',
-      'vvfat':      'BlockdevOptionsVVFAT'
+      'vvfat':      'BlockdevOptionsVVFAT',
+      'replication':'BlockdevOptionsReplication'
   } }
 
 ##
