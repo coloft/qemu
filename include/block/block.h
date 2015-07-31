@@ -622,4 +622,9 @@ void bdrv_add_child(BlockDriverState *bs, QDict *options, Error **errp);
 void bdrv_del_child(BlockDriverState *bs, BlockDriverState *child,
                     Error **errp);
 
+void bdrv_start_replication(BlockDriverState *bs, ReplicationMode mode,
+                            Error **errp);
+void bdrv_do_checkpoint(BlockDriverState *bs, Error **errp);
+void bdrv_stop_replication(BlockDriverState *bs, bool failover, Error **errp);
+
 #endif
