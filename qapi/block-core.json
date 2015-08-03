@@ -1411,6 +1411,8 @@
 # @allow-write-backing-file: #optional whether the backing file is opened in
 #                            read-write mode. It is only for backing file
 #                            (Since 2.5 default: false)
+# @ignore-errors: #options whether the child's I/O error should be ignored.
+#                 it is only for quorum's child.(Since 2.5 default: false)
 #
 # Since: 1.7
 ##
@@ -1425,7 +1427,8 @@
             '*werror': 'BlockdevOnError',
             '*read-only': 'bool',
             '*detect-zeroes': 'BlockdevDetectZeroesOptions',
-            '*allow-write-backing-file': 'bool' } }
+            '*allow-write-backing-file': 'bool',
+            '*ignore-errors': 'bool' } }
 
 ##
 # @BlockdevOptionsFile
