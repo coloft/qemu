@@ -1408,6 +1408,10 @@
 # @detect-zeroes: #optional detect and optimize zero writes (Since 2.1)
 #                 (default: off)
 #
+# @allow-write-backing-file: #optional whether the backing file is opened in
+#                            read-write mode. It is only for backing file
+#                            (Since 2.5 default: false)
+#
 # Since: 1.7
 ##
 { 'struct': 'BlockdevOptionsBase',
@@ -1420,7 +1424,8 @@
             '*rerror': 'BlockdevOnError',
             '*werror': 'BlockdevOnError',
             '*read-only': 'bool',
-            '*detect-zeroes': 'BlockdevDetectZeroesOptions' } }
+            '*detect-zeroes': 'BlockdevDetectZeroesOptions',
+            '*allow-write-backing-file': 'bool' } }
 
 ##
 # @BlockdevOptionsFile
