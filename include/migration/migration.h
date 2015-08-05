@@ -49,7 +49,7 @@ typedef QLIST_HEAD(, LoadStateEntry) LoadStateEntry_Head;
 
 /* State for the incoming migration */
 struct MigrationIncomingState {
-    QEMUFile *file;
+    QEMUFile *from_src_file;
 
     int state;
 
@@ -73,7 +73,7 @@ struct MigrationState
     size_t xfer_limit;
     QemuThread thread;
     QEMUBH *cleanup_bh;
-    QEMUFile *file;
+    QEMUFile *to_dst_file;
     int parameters[MIGRATION_PARAMETER_MAX];
 
     int state;

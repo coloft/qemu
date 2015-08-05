@@ -96,7 +96,7 @@ MigrationIncomingState *migration_incoming_get_current(void)
 MigrationIncomingState *migration_incoming_state_new(QEMUFile* f)
 {
     mis_current = g_new0(MigrationIncomingState, 1);
-    mis_current->file = f;
+    mis_current->from_src_file = f;
     mis_current->state = MIGRATION_STATUS_NONE;
     QLIST_INIT(&mis_current->loadvm_handlers);
 
@@ -642,15 +642,15 @@ static void migrate_fd_cleanup(void *opaque)
     qemu_bh_delete(s->cleanup_bh);
     s->cleanup_bh = NULL;
 
-    if (s->file) {
+    if (s->to_dst_file) {
         trace_migrate_fd_cleanup();
         qemu_mutex_unlock_iothread();
         qemu_thread_join(&s->thread);
         qemu_mutex_lock_iothread();
 
         migrate_compress_threads_join();
-        qemu_fclose(s->file);
-        s->file = NULL;
+        qemu_fclose(s->to_dst_file);
+        s->to_dst_file = NULL;
     }
 
     assert(s->state != MIGRATION_STATUS_ACTIVE);
@@ -669,7 +669,7 @@ static void migrate_fd_cleanup(void *opaque)
 void migrate_fd_error(MigrationState *s)
 {
     trace_migrate_fd_error();
-    assert(s->file == NULL);
+    assert(s->to_dst_file == NULL);
     migrate_set_state(&s->state, MIGRATION_STATUS_SETUP,
                       MIGRATION_STATUS_FAILED);
     notifier_list_notify(&migration_state_notifiers, s);
@@ -678,7 +678,7 @@ void migrate_fd_error(MigrationState *s)
 static void migrate_fd_cancel(MigrationState *s)
 {
     int old_state ;
-    QEMUFile *f = migrate_get_current()->file;
+    QEMUFile *f = migrate_get_current()->to_dst_file;
     trace_migrate_fd_cancel();
 
     do {
@@ -926,8 +926,9 @@ void qmp_migrate_set_speed(int64_t value, Error **errp)
 
     s = migrate_get_current();
     s->bandwidth_limit = value;
-    if (s->file) {
-        qemu_file_set_rate_limit(s->file, s->bandwidth_limit / XFER_LIMIT_RATIO);
+    if (s->to_dst_file) {
+        qemu_file_set_rate_limit(s->to_dst_file,
+                                 s->bandwidth_limit / XFER_LIMIT_RATIO);
     }
 }
 
@@ -1041,8 +1042,8 @@ static void migration_completion(MigrationState *s, bool *old_vm_running,
     if (!ret) {
         ret = vm_stop_force_state(RUN_STATE_FINISH_MIGRATE);
         if (ret >= 0) {
-            qemu_file_set_rate_limit(s->file, INT64_MAX);
-            qemu_savevm_state_complete(s->file);
+            qemu_file_set_rate_limit(s->to_dst_file, INT64_MAX);
+            qemu_savevm_state_complete(s->to_dst_file);
         }
     }
     qemu_mutex_unlock_iothread();
@@ -1051,7 +1052,7 @@ static void migration_completion(MigrationState *s, bool *old_vm_running,
         goto fail;
     }
 
-    if (qemu_file_get_error(s->file)) {
+    if (qemu_file_get_error(s->to_dst_file)) {
         trace_migration_completion_file_err();
         goto fail;
     }
@@ -1089,8 +1090,8 @@ static void *migration_thread(void *opaque)
 
     rcu_register_thread();
 
-    qemu_savevm_state_header(s->file);
-    qemu_savevm_state_begin(s->file, &s->params);
+    qemu_savevm_state_header(s->to_dst_file);
+    qemu_savevm_state_begin(s->to_dst_file, &s->params);
 
     s->setup_time = qemu_clock_get_ms(QEMU_CLOCK_HOST) - setup_start;
     migrate_set_state(&s->state, MIGRATION_STATUS_SETUP,
@@ -1100,11 +1101,11 @@ static void *migration_thread(void *opaque)
         int64_t current_time;
         uint64_t pending_size;
 
-        if (!qemu_file_rate_limit(s->file)) {
-            pending_size = qemu_savevm_state_pending(s->file, max_size);
+        if (!qemu_file_rate_limit(s->to_dst_file)) {
+            pending_size = qemu_savevm_state_pending(s->to_dst_file, max_size);
             trace_migrate_pending(pending_size, max_size);
             if (pending_size && pending_size >= max_size) {
-                qemu_savevm_state_iterate(s->file);
+                qemu_savevm_state_iterate(s->to_dst_file);
             } else {
                 trace_migration_thread_low_pending(pending_size);
                 migration_completion(s, &old_vm_running, &start_time);
@@ -1112,14 +1113,15 @@ static void *migration_thread(void *opaque)
             }
         }
 
-        if (qemu_file_get_error(s->file)) {
+        if (qemu_file_get_error(s->to_dst_file)) {
             migrate_set_state(&s->state, MIGRATION_STATUS_ACTIVE,
                               MIGRATION_STATUS_FAILED);
             break;
         }
         current_time = qemu_clock_get_ms(QEMU_CLOCK_REALTIME);
         if (current_time >= initial_time + BUFFER_DELAY) {
-            uint64_t transferred_bytes = qemu_ftell(s->file) - initial_bytes;
+            uint64_t transferred_bytes = qemu_ftell(s->to_dst_file) -
+                                         initial_bytes;
             uint64_t time_spent = current_time - initial_time;
             double bandwidth = transferred_bytes / time_spent;
             max_size = bandwidth * migrate_max_downtime() / 1000000;
@@ -1135,11 +1137,11 @@ static void *migration_thread(void *opaque)
                 s->expected_downtime = s->dirty_bytes_rate / bandwidth;
             }
 
-            qemu_file_reset_rate_limit(s->file);
+            qemu_file_reset_rate_limit(s->to_dst_file);
             initial_time = current_time;
-            initial_bytes = qemu_ftell(s->file);
+            initial_bytes = qemu_ftell(s->to_dst_file);
         }
-        if (qemu_file_rate_limit(s->file)) {
+        if (qemu_file_rate_limit(s->to_dst_file)) {
             /* usleep expects microseconds */
             g_usleep((initial_time + BUFFER_DELAY - current_time)*1000);
         }
@@ -1151,7 +1153,7 @@ static void *migration_thread(void *opaque)
     qemu_mutex_lock_iothread();
     if (s->state == MIGRATION_STATUS_COMPLETED) {
         int64_t end_time = qemu_clock_get_ms(QEMU_CLOCK_REALTIME);
-        uint64_t transferred_bytes = qemu_ftell(s->file);
+        uint64_t transferred_bytes = qemu_ftell(s->to_dst_file);
         s->total_time = end_time - s->total_time;
         s->downtime = end_time - start_time;
         if (s->total_time) {
@@ -1179,7 +1181,7 @@ void migrate_fd_connect(MigrationState *s)
     s->expected_downtime = max_downtime/1000000;
     s->cleanup_bh = qemu_bh_new(migrate_fd_cleanup, s);
 
-    qemu_file_set_rate_limit(s->file,
+    qemu_file_set_rate_limit(s->to_dst_file,
                              s->bandwidth_limit / XFER_LIMIT_RATIO);
 
     /* Notify before starting migration thread */
