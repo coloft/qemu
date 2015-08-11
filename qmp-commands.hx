@@ -3927,6 +3927,73 @@ Example (2):
 EQMP
 
     {
+        .name       = "child-add",
+        .args_type  = "device:B,options:q",
+        .mhandler.cmd_new = qmp_marshal_input_child_add,
+    },
+
+SQMP
+child-add
+------------
+
+Add a child to a quorum node.
+
+This command is still a work in progress. It doesn't support all
+block drivers. Stay away from it unless you want it to help with
+its development.
+
+Arguments:
+
+- "device": the quorum's id or node name
+- "options": the new child options
+
+Example:
+
+-> { "execute": "child-add",
+    "arguments": {
+        "device": "disk1",
+        "options" : {
+            "child": {
+                "driver": "qcow2",
+                "file": {
+                    "driver": "file",
+                    "filename": "test.qcow2"
+                },
+                "node-name": "new_node"
+            }
+        }
+    }
+<- { "return": {} }
+
+EQMP
+
+    {
+        .name        = "child-del",
+        .args_type   = "parent:B,child:B",
+        .mhandler.cmd_new = qmp_marshal_input_child_del,
+    },
+
+SQMP
+child-del
+------------
+
+Delete a child from a quorum node. It can be used to remove a broken
+quorum child.
+
+Arguments:
+
+- "parent": the quorum's id or node name
+- "child": the child node-name which will be removed
+
+Example:
+
+-> { "execute": "child-del",
+    "arguments": { "parent": "disk1", "child": "new_node" } }
+<- { "return": {} }
+
+EQMP
+
+    {
         .name       = "query-named-block-nodes",
         .args_type  = "",
         .mhandler.cmd_new = qmp_marshal_input_query_named_block_nodes,

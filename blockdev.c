@@ -2192,6 +2192,23 @@ void hmp_drive_del(Monitor *mon, const QDict *qdict)
     aio_context_release(aio_context);
 }
 
+static void do_child_add(const char *device, QDict *opts, Error **errp)
+{
+    BlockDriverState *bs;
+    Error *local_err = NULL;
+
+    bs = bdrv_lookup_bs(device, device, &local_err);
+    if (!bs) {
+        error_propagate(errp, local_err);
+        return;
+    }
+
+    bdrv_add_child(bs, opts, &local_err);
+    if (local_err) {
+        error_propagate(errp, local_err);
+    }
+}
+
 void qmp_block_resize(bool has_device, const char *device,
                       bool has_node_name, const char *node_name,
                       int64_t size, Error **errp)
@@ -3100,6 +3117,68 @@ void qmp_blockdev_add(BlockdevOptions *options, Error **errp)
 
 fail:
     qmp_output_visitor_cleanup(ov);
+}
+
+void qmp_child_add(const char *device, BlockdevOptionsChild *options,
+                   Error **errp)
+{
+    QmpOutputVisitor *ov = qmp_output_visitor_new();
+    QObject *obj;
+    QDict *qdict;
+    Error *local_err = NULL;
+
+    if (options->child->has_id || options->child->has_discard ||
+        options->child->has_cache || options->child->has_aio ||
+        options->child->has_rerror || options->child->has_werror ||
+        options->child->has_read_only || options->child->has_detect_zeroes) {
+        error_setg(errp, "id, discard, cache, aio, rerror, werror, readonly"
+                   " and detect_zeroes cann't be used for child-add");
+        goto fail;
+    }
+
+    visit_type_BlockdevOptionsChild(qmp_output_get_visitor(ov),
+                                    &options, NULL, &local_err);
+    if (local_err) {
+        error_propagate(errp, local_err);
+        goto fail;
+    }
+
+    obj = qmp_output_get_qobject(ov);
+    qdict = qobject_to_qdict(obj);
+
+    qdict_flatten(qdict);
+
+    do_child_add(device, qdict, &local_err);
+    if (local_err) {
+        error_propagate(errp, local_err);
+        goto fail;
+    }
+
+fail:
+    qmp_output_visitor_cleanup(ov);
+}
+
+void qmp_child_del(const char *parent, const char *child, Error **errp)
+{
+    BlockDriverState *parent_bs, *child_bs;
+    Error *local_err = NULL;
+
+    parent_bs = bdrv_lookup_bs(parent, parent, &local_err);
+    if (!parent_bs) {
+        error_propagate(errp, local_err);
+        return;
+    }
+
+    child_bs = bdrv_lookup_bs(child, child, &local_err);
+    if (!child_bs) {
+        error_propagate(errp, local_err);
+        return;
+    }
+
+    bdrv_del_child(parent_bs, child_bs, &local_err);
+    if (local_err) {
+        error_propagate(errp, local_err);
+    }
 }
 
 BlockJobInfoList *qmp_query_block_jobs(Error **errp)
