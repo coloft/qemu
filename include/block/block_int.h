@@ -288,6 +288,11 @@ struct BlockDriver {
      */
     int (*bdrv_probe_geometry)(BlockDriverState *bs, HDGeometry *geo);
 
+    void (*bdrv_add_child)(BlockDriverState *bs, QDict *options,
+                           Error **errp);
+    void (*bdrv_del_child)(BlockDriverState *bs, BlockDriverState *child,
+                           Error **errp);
+
     QLIST_ENTRY(BlockDriver) list;
 };
 

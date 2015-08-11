@@ -4252,3 +4252,46 @@ BlockAcctStats *bdrv_get_stats(BlockDriverState *bs)
 {
     return &bs->stats;
 }
+
+/*
+ * Hot add/remove a BDS's child. So the user can take a child offline when
+ * it is broken and take a new child online
+ */
+void bdrv_add_child(BlockDriverState *bs, QDict *options, Error **errp)
+{
+
+    if (!bs->drv || !bs->drv->bdrv_add_child) {
+        error_setg(errp, "The BDS %s doesn't support adding a child",
+                   bdrv_get_device_or_node_name(bs));
+        return;
+    }
+
+    bs->drv->bdrv_add_child(bs, options, errp);
+}
+
+void bdrv_del_child(BlockDriverState *bs, BlockDriverState *child_bs,
+                    Error **errp)
+{
+    BdrvChild *child;
+
+    if (!bs->drv || !bs->drv->bdrv_del_child) {
+        error_setg(errp, "The BDS %s doesn't support removing a child",
+                   bdrv_get_device_or_node_name(bs));
+        return;
+    }
+
+    QLIST_FOREACH(child, &bs->children, next) {
+        if (child->bs == child_bs) {
+            break;
+        }
+    }
+
+    if (!child) {
+        error_setg(errp, "The BDS %s is not the BDS %s's child",
+                   bdrv_get_device_or_node_name(child_bs),
+                   bdrv_get_device_or_node_name(bs));
+        return;
+    }
+
+    bs->drv->bdrv_del_child(bs, child_bs, errp);
+}
