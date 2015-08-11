@@ -616,4 +616,8 @@ void bdrv_flush_io_queue(BlockDriverState *bs);
 
 BlockAcctStats *bdrv_get_stats(BlockDriverState *bs);
 
+void bdrv_add_child(BlockDriverState *bs, QDict *options, Error **errp);
+void bdrv_del_child(BlockDriverState *bs, BlockDriverState *child,
+                    Error **errp);
+
 #endif
