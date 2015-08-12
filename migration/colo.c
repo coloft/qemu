@@ -390,6 +390,11 @@ static void colo_process_checkpoint(MigrationState *s)
     qemu_mutex_unlock_iothread();
     trace_colo_vm_state_change("stop", "run");
 
+    ret = global_state_store();
+    if (ret < 0) {
+        goto out;
+    }
+
     while (s->state == MIGRATION_STATUS_COLO) {
         if (failover_get_state() != FAILOVER_STATUS_NONE) {
             error_report("failover request");
