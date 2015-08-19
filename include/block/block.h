@@ -60,6 +60,7 @@ typedef enum {
      * opened with BDRV_O_UNMAP.
      */
     BDRV_REQ_MAY_UNMAP    = 0x4,
+    BDRV_REQ_NESTED       = 0x8,
 } BdrvRequestFlags;
 
 typedef struct BlockSizes {
@@ -252,6 +253,8 @@ int bdrv_pwrite_sync(BlockDriverState *bs, int64_t offset,
 int coroutine_fn bdrv_co_readv(BlockDriverState *bs, int64_t sector_num,
     int nb_sectors, QEMUIOVector *qiov);
 int coroutine_fn bdrv_co_copy_on_readv(BlockDriverState *bs,
+    int64_t sector_num, int nb_sectors, QEMUIOVector *qiov);
+int coroutine_fn bdrv_co_nested_readv(BlockDriverState *bs,
     int64_t sector_num, int nb_sectors, QEMUIOVector *qiov);
 int coroutine_fn bdrv_co_writev(BlockDriverState *bs, int64_t sector_num,
     int nb_sectors, QEMUIOVector *qiov);
