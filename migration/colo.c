@@ -39,6 +39,20 @@ bool migration_incoming_in_colo_state(void)
 static void *colo_thread(void *opaque)
 {
     MigrationState *s = opaque;
+    int fd, ret = 0;
+
+    /* Dup the fd of to_dst_file */
+    fd = dup(qemu_get_fd(s->to_dst_file));
+    if (fd == -1) {
+        ret = -errno;
+        goto out;
+    }
+    s->from_dst_file = qemu_fopen_socket(fd, "rb");
+    if (!s->from_dst_file) {
+        ret = -EINVAL;
+        error_report("Open QEMUFile failed!");
+        goto out;
+    }
 
     qemu_mutex_lock_iothread();
     vm_start();
@@ -47,8 +61,16 @@ static void *colo_thread(void *opaque)
 
     /*TODO: COLO checkpoint savevm loop*/
 
+out:
+    if (ret < 0) {
+        error_report("Detect some error: %s", strerror(-ret));
+    }
     migrate_set_state(&s->state, MIGRATION_STATUS_COLO,
                       MIGRATION_STATUS_COMPLETED);
+
+    if (s->from_dst_file) {
+        qemu_fclose(s->from_dst_file);
+    }
 
     qemu_mutex_lock_iothread();
     qemu_bh_schedule(s->cleanup_bh);
@@ -86,12 +108,33 @@ void colo_init_checkpointer(MigrationState *s)
 void *colo_process_incoming_thread(void *opaque)
 {
     MigrationIncomingState *mis = opaque;
+    int fd, ret = 0;
 
     migrate_set_state(&mis->state, MIGRATION_STATUS_ACTIVE,
                       MIGRATION_STATUS_COLO);
 
+    fd = dup(qemu_get_fd(mis->from_src_file));
+    if (fd < 0) {
+        ret = -errno;
+        goto out;
+    }
+    mis->to_src_file = qemu_fopen_socket(fd, "wb");
+    if (!mis->to_src_file) {
+        ret = -EINVAL;
+        error_report("Can't open incoming channel!");
+        goto out;
+    }
     /* TODO: COLO checkpoint restore loop */
 
+out:
+    if (ret < 0) {
+        error_report("colo incoming thread will exit, detect error: %s",
+                     strerror(-ret));
+    }
+
+    if (mis->to_src_file) {
+        qemu_fclose(mis->to_src_file);
+    }
     migration_incoming_exit_colo();
 
     return NULL;
