@@ -48,6 +48,45 @@ bool migration_incoming_in_colo_state(void)
     return (mis && (mis->state == MIGRATION_STATUS_COLO));
 }
 
+static bool colo_runstate_is_stopped(void)
+{
+    return runstate_check(RUN_STATE_COLO) || !runstate_is_running();
+}
+
+static void primary_vm_do_failover(void)
+{
+    MigrationState *s = migrate_get_current();
+    int old_state;
+
+    if (s->state != MIGRATION_STATUS_FAILED) {
+        migrate_set_state(&s->state, MIGRATION_STATUS_COLO,
+                          MIGRATION_STATUS_COMPLETED);
+    }
+    qemu_bh_schedule(s->cleanup_bh);
+
+    vm_start();
+
+    old_state = failover_set_state(FAILOVER_STATUS_HANDLING,
+                                   FAILOVER_STATUS_COMPLETED);
+    if (old_state != FAILOVER_STATUS_HANDLING) {
+        error_report("Serious error while do failover for Primary VM,"
+                     "old_state: %d", old_state);
+        return;
+    }
+}
+
+void colo_do_failover(MigrationState *s)
+{
+    /* Make sure vm stopped while failover */
+    if (!colo_runstate_is_stopped()) {
+        vm_stop_force_state(RUN_STATE_COLO);
+    }
+
+    if (get_colo_mode() == COLO_MODE_PRIMARY) {
+        primary_vm_do_failover();
+    }
+}
+
 /* colo checkpoint control helper */
 static int colo_ctl_put(QEMUFile *f, uint32_t cmd, uint64_t value)
 {
@@ -132,9 +171,23 @@ static int colo_do_checkpoint_transaction(MigrationState *s,
 
     /* suspend and save vm state to colo buffer */
     qemu_mutex_lock_iothread();
+    if (failover_request_is_active()) {
+        qemu_mutex_unlock_iothread();
+        ret = -1;
+        goto out;
+    }
+    /* suspend and save vm state to colo buffer */
     vm_stop_force_state(RUN_STATE_COLO);
     qemu_mutex_unlock_iothread();
     trace_colo_vm_state_change("run", "stop");
+    /*
+     * failover request bh could be called after
+     * vm_stop_force_state so we check failover_request_is_active() again.
+     */
+    if (failover_request_is_active()) {
+        ret = -1;
+        goto out;
+    }
 
     /* Disable block migration */
     s->params.blk = 0;
@@ -234,6 +287,11 @@ static void *colo_thread(void *opaque)
     trace_colo_vm_state_change("stop", "run");
 
     while (s->state == MIGRATION_STATUS_COLO) {
+        if (failover_request_is_active()) {
+            error_report("failover request");
+            goto out;
+        }
+
         current_time = qemu_clock_get_ms(QEMU_CLOCK_HOST);
         if (current_time - checkpoint_time < CHECKPOINT_MAX_PEROID) {
             g_usleep(100000);
@@ -251,8 +309,6 @@ out:
     if (ret < 0) {
         error_report("Detect some error: %s", strerror(-ret));
     }
-    migrate_set_state(&s->state, MIGRATION_STATUS_COLO,
-                      MIGRATION_STATUS_COMPLETED);
 
     qsb_free(buffer);
     buffer = NULL;
@@ -260,10 +316,6 @@ out:
    if (s->from_dst_file) {
         qemu_fclose(s->from_dst_file);
     }
-
-    qemu_mutex_lock_iothread();
-    qemu_bh_schedule(s->cleanup_bh);
-    qemu_mutex_unlock_iothread();
 
     return NULL;
 }
