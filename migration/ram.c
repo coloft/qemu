@@ -1102,7 +1102,7 @@ static void migration_bitmap_free(struct BitmapRcu *bmap)
     g_free(bmap);
 }
 
-static void migration_end(void)
+void migration_end(void)
 {
     /* caller have hold iothread lock or is in a bh, so there is
      * no writing race against this migration_bitmap
