@@ -1199,10 +1199,21 @@ void qmp_netdev_del(const char *id, Error **errp)
 
 void print_net_client(Monitor *mon, NetClientState *nc)
 {
+    NetFilterState *nf;
+
     monitor_printf(mon, "%s: index=%d,type=%s,%s\n", nc->name,
                    nc->queue_index,
                    NetClientOptionsKind_lookup[nc->info->type],
                    nc->info_str);
+    if (!QTAILQ_EMPTY(&nc->filters)) {
+        monitor_printf(mon, "filters:\n");
+    }
+    QTAILQ_FOREACH(nf, &nc->filters, next) {
+        monitor_printf(mon, "  - %s: type=%s,netdev=%s,chain=%s\n", nf->name,
+                       NetFilterType_lookup[nf->info->type],
+                       nf->netdev->name,
+                       qemu_netfilter_get_chain_str(nf->chain));
+    }
 }
 
 RxFilterInfoList *qmp_query_rx_filter(bool has_name, const char *name,

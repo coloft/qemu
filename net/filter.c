@@ -24,6 +24,28 @@
 
 static QTAILQ_HEAD(, NetFilterState) net_filters;
 
+const char *qemu_netfilter_get_chain_str(int chain)
+{
+    const char *str;
+
+    switch (chain) {
+    case NET_FILTER_IN:
+        str = "in";
+        break;
+    case NET_FILTER_OUT:
+        str = "out";
+        break;
+    case NET_FILTER_ALL:
+        str = "all";
+        break;
+    default:
+        str = "unknown";
+        break;
+    }
+
+    return str;
+}
+
 NetFilterState *qemu_new_net_filter(NetFilterInfo *info,
                                     NetClientState *netdev,
                                     const char *name,
