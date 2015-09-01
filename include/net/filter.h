@@ -59,7 +59,13 @@ void qemu_del_net_filter(NetFilterState *nf);
 void netfilter_add(QemuOpts *opts, Error **errp);
 const char *qemu_netfilter_get_chain_str(int chain);
 
+int qemu_find_netfilters_by_model(const char *model, NetFilterState **nfs,
+                                  int max);
+
 /* pass the packet to the next filter */
 ssize_t qemu_netfilter_pass_to_next(NetFilterState *nf, NetPacket *packet);
+
+/* buffer filter */
+void filter_buffer_release_all(void);
 
 #endif /* QEMU_NET_FILTER_H */

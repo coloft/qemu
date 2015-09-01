@@ -124,3 +124,16 @@ int net_init_filter_buffer(const NetFilter *netfilter, const char *name,
 
     return 0;
 }
+
+/* public APIs */
+void filter_buffer_release_all(void)
+{
+    NetFilterState *nfs[MAX_QUEUE_NUM];
+    int queues, i;
+
+    queues = qemu_find_netfilters_by_model("buffer", nfs, MAX_QUEUE_NUM);
+
+    for (i = 0; i < queues; i++) {
+        filter_buffer_flush(nfs[i]);
+    }
+}

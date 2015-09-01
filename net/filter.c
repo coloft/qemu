@@ -101,6 +101,24 @@ static int qemu_find_netfilters_by_name(const char *id, NetFilterState **nfs,
     return ret;
 }
 
+int qemu_find_netfilters_by_model(const char *model, NetFilterState **nfs,
+                                  int max)
+{
+    NetFilterState *nf;
+    int ret = 0;
+
+    QTAILQ_FOREACH(nf, &net_filters, global_list) {
+        if (!strcmp(nf->model, model)) {
+            if (ret < max) {
+                nfs[ret] = nf;
+            }
+            ret++;
+        }
+    }
+
+    return ret;
+}
+
 void qemu_del_net_filter(NetFilterState *nf)
 {
     NetFilterState *nfs[MAX_QUEUE_NUM];
