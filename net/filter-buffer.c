@@ -95,26 +95,15 @@ int net_init_filter_buffer(const NetFilter *netfilter, const char *name,
     NetFilterState *nf;
     FilterBufferState *s;
     const NetFilterBufferOptions *bufferopt;
-    int interval;
 
     assert(netfilter->kind == NET_FILTER_TYPE_BUFFER);
     bufferopt = netfilter->buffer;
-    interval = bufferopt->has_interval ? bufferopt->interval : 0;
-    /*
-     * this check should be dropped when there're VM FT solutions like MC
-     * or COLO use this filter to release packets on demand.
-     */
-    if (!interval) {
-        error_setg(errp, QERR_INVALID_PARAMETER_VALUE, "interval",
-                   "a non-zero interval");
-        return -1;
-    }
 
     nf = qemu_new_net_filter(&net_filter_buffer_info, netdev, name,
                              "buffer", chain);
     s = DO_UPCAST(FilterBufferState, nf, nf);
     s->incoming_queue = qemu_new_net_queue(nf);
-    s->interval = interval;
+    s->interval = bufferopt->has_interval ? bufferopt->interval : 0;
     if (s->interval) {
         timer_init_us(&s->release_timer, QEMU_CLOCK_VIRTUAL,
                       filter_buffer_release_timer, s);
