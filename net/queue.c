@@ -39,25 +39,6 @@
  * unbounded queueing.
  */
 
-struct NetPacket {
-    QTAILQ_ENTRY(NetPacket) entry;
-    NetClientState *sender;
-    unsigned flags;
-    int size;
-    NetPacketSent *sent_cb;
-    uint8_t data[0];
-};
-
-struct NetQueue {
-    void *opaque;
-    uint32_t nq_maxlen;
-    uint32_t nq_count;
-
-    QTAILQ_HEAD(packets, NetPacket) packets;
-
-    unsigned delivering : 1;
-};
-
 NetQueue *qemu_new_net_queue(void *opaque)
 {
     NetQueue *queue;
