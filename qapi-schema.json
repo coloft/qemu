@@ -2537,6 +2537,66 @@
     'opts': 'NetClientOptions' } }
 
 ##
+# @NetFilterDummyOptions:
+#
+# An dummy filter for network backend
+#
+# Since: 2.5
+##
+{ 'struct': 'NetFilterDummyOptions',
+  'data': { } }
+
+##
+# @NetFilterType:
+#
+# An enumeration of netfilter types.
+#
+# Since: 2.5
+##
+{ 'enum': 'NetFilterType',
+  'data': ['dummy'] }
+
+##
+# @NetFilterBase
+#
+# Network filters which captures the packets of a network backend.
+#
+# @id: identifier for monitor commands
+#
+# @netdev: the network backend it attached to
+#
+# @chain: #optional accept "in","out","all", if not specified, default is "all"
+#         "in" means this filter will receive packets sent to the @netdev
+#         "out" means this filter will receive packets sent from the @netdev
+#         "all" means this filter will receive packets both sent to/from
+#               the @netdev
+#
+# @opts: filter type specific properties
+#
+# Since 2.5
+##
+{ 'struct': 'NetFilterBase',
+  'data': {
+    'id':   'str',
+    'netdev': 'str',
+    '*chain': 'str',
+    'type': 'NetFilterType' } }
+
+##
+# @NetFilter
+#
+# A discriminated record of network filters.
+#
+# Since 2.5
+#
+##
+{ 'union': 'NetFilter',
+  'base': 'NetFilterBase',
+  'discriminator': 'type',
+  'data': {
+    'dummy': 'NetFilterDummyOptions' } }
+
+##
 # @InetSocketAddress
 #
 # Captures a socket address or address range in the Internet namespace.
