@@ -562,6 +562,44 @@ int qemu_can_send_packet(NetClientState *sender)
     return 1;
 }
 
+static ssize_t filter_receive_iov(NetClientState *nc, int chain,
+                                  NetClientState *sender,
+                                  unsigned flags,
+                                  const struct iovec *iov,
+                                  int iovcnt,
+                                  NetPacketSent *sent_cb)
+{
+    ssize_t ret = 0;
+    NetFilterState *nf = NULL;
+
+    QTAILQ_FOREACH(nf, &nc->filters, next) {
+        if (nf->chain == chain || nf->chain == NET_FILTER_ALL) {
+            ret = nf->info->receive_iov(nf, sender, flags,
+                                        iov, iovcnt, sent_cb);
+            if (ret) {
+                return ret;
+            }
+        }
+    }
+
+    return ret;
+}
+
+static ssize_t filter_receive(NetClientState *nc, int chain,
+                              NetClientState *sender,
+                              unsigned flags,
+                              const uint8_t *data,
+                              size_t size,
+                              NetPacketSent *sent_cb)
+{
+    struct iovec iov = {
+        .iov_base = (void *)data,
+        .iov_len = size
+    };
+
+    return filter_receive_iov(nc, chain, sender, flags, &iov, 1, sent_cb);
+}
+
 ssize_t qemu_deliver_packet(NetClientState *sender,
                             unsigned flags,
                             const uint8_t *data,
@@ -633,6 +671,7 @@ static ssize_t qemu_send_packet_async_with_flags(NetClientState *sender,
                                                  NetPacketSent *sent_cb)
 {
     NetQueue *queue;
+    int ret;
 
 #ifdef DEBUG_NET
     printf("qemu_send_packet_async:\n");
@@ -641,6 +680,19 @@ static ssize_t qemu_send_packet_async_with_flags(NetClientState *sender,
 
     if (sender->link_down || !sender->peer) {
         return size;
+    }
+
+    /* Let filters handle the packet first */
+    ret = filter_receive(sender, NET_FILTER_OUT,
+                         sender, flags, buf, size, sent_cb);
+    if (ret) {
+        return ret;
+    }
+
+    ret = filter_receive(sender->peer, NET_FILTER_IN,
+                         sender, flags, buf, size, sent_cb);
+    if (ret) {
+        return ret;
     }
 
     queue = sender->peer->incoming_queue;
@@ -713,9 +765,23 @@ ssize_t qemu_sendv_packet_async(NetClientState *sender,
                                 NetPacketSent *sent_cb)
 {
     NetQueue *queue;
+    int ret;
 
     if (sender->link_down || !sender->peer) {
         return iov_size(iov, iovcnt);
+    }
+
+    /* Let filters handle the packet first */
+    ret = filter_receive_iov(sender, NET_FILTER_OUT, sender,
+                             QEMU_NET_PACKET_FLAG_NONE, iov, iovcnt, sent_cb);
+    if (ret) {
+        return ret;
+    }
+
+    ret = filter_receive_iov(sender->peer, NET_FILTER_IN, sender,
+                             QEMU_NET_PACKET_FLAG_NONE, iov, iovcnt, sent_cb);
+    if (ret) {
+        return ret;
     }
 
     queue = sender->peer->incoming_queue;
