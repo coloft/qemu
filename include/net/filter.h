@@ -53,5 +53,7 @@ NetFilterState *qemu_new_net_filter(NetFilterInfo *info,
                                     NetClientState *netdev,
                                     const char *name,
                                     int chain);
+void qemu_del_net_filter(NetFilterState *nf);
+void netfilter_add(QemuOpts *opts, Error **errp);
 
 #endif /* QEMU_NET_FILTER_H */

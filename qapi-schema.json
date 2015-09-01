@@ -2537,6 +2537,35 @@
     'opts': 'NetClientOptions' } }
 
 ##
+# @netfilter-add:
+#
+# Add a netfilter.
+#
+# @data: see NetFilterBase options and specific type's options.
+#
+# Since: 2.5
+#
+# Returns: Nothing on success
+#          If it is not a valid netfilter, DeviceNotFound
+##
+{ 'command': 'netfilter-add',
+  'data': { 'data': 'NetFilter' } }
+
+##
+# @netfilter-del:
+#
+# Remove a netfilter.
+#
+# @id: the name of the netfilter to remove
+#
+# Returns: Nothing on success
+#          If @id is not a valid netfilter, DeviceNotFound
+#
+# Since: 2.5
+##
+{ 'command': 'netfilter-del', 'data': {'id': 'str'} }
+
+##
 # @NetFilterDummyOptions:
 #
 # An dummy filter for network backend

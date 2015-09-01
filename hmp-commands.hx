@@ -1253,6 +1253,36 @@ Remove host network device.
 ETEXI
 
     {
+        .name       = "netfilter_add",
+        .args_type  = "netfilter:O",
+        .params     = "buffer,id=str,netdev=str[,chain=in|out|all,prop=value][,...]",
+        .help       = "add netfilter",
+        .mhandler.cmd = hmp_netfilter_add,
+        .command_completion = netfilter_add_completion,
+    },
+
+STEXI
+@item netfilter_add
+@findex netfilter_add
+Add a netfilter to @var{netdev}, which captures the network packets on @var{netdev}.
+ETEXI
+
+    {
+        .name       = "netfilter_del",
+        .args_type  = "id:s",
+        .params     = "id",
+        .help       = "remove netfilter",
+        .mhandler.cmd = hmp_netfilter_del,
+        .command_completion = netfilter_del_completion,
+    },
+
+STEXI
+@item netfilter_del
+@findex netfilter_del
+Remove the netfilter which named @var{id}.
+ETEXI
+
+    {
         .name       = "object_add",
         .args_type  = "object:O",
         .params     = "[qom-type=]type,id=str[,prop=value][,...]",

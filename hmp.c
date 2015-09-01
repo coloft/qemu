@@ -15,6 +15,7 @@
 
 #include "hmp.h"
 #include "net/net.h"
+#include "net/filter.h"
 #include "net/eth.h"
 #include "sysemu/char.h"
 #include "sysemu/block-backend.h"
@@ -1596,6 +1597,34 @@ void hmp_netdev_del(Monitor *mon, const QDict *qdict)
     Error *err = NULL;
 
     qmp_netdev_del(id, &err);
+    hmp_handle_error(mon, &err);
+}
+
+void hmp_netfilter_add(Monitor *mon, const QDict *qdict)
+{
+    Error *err = NULL;
+    QemuOpts *opts;
+
+    opts = qemu_opts_from_qdict(qemu_find_opts("netfilter"), qdict, &err);
+    if (err) {
+        goto out;
+    }
+
+    netfilter_add(opts, &err);
+    if (err) {
+        qemu_opts_del(opts);
+    }
+
+out:
+    hmp_handle_error(mon, &err);
+}
+
+void hmp_netfilter_del(Monitor *mon, const QDict *qdict)
+{
+    const char *id = qdict_get_str(qdict, "id");
+    Error *err = NULL;
+
+    qmp_netfilter_del(id, &err);
     hmp_handle_error(mon, &err);
 }
 

@@ -13,6 +13,7 @@
 #include "qapi/opts-visitor.h"
 #include "qapi/dealloc-visitor.h"
 #include "qemu/config-file.h"
+#include "qmp-commands.h"
 
 #include "net/filter.h"
 #include "net/net.h"
@@ -42,7 +43,7 @@ NetFilterState *qemu_new_net_filter(NetFilterInfo *info,
     return nf;
 }
 
-static inline void qemu_cleanup_net_filter(NetFilterState *nf)
+static void qemu_cleanup_net_filter(NetFilterState *nf)
 {
     QTAILQ_REMOVE(&nf->netdev->filters, nf, next);
     QTAILQ_REMOVE(&net_filters, nf, global_list);
@@ -53,6 +54,42 @@ static inline void qemu_cleanup_net_filter(NetFilterState *nf)
 
     g_free(nf->name);
     g_free(nf);
+}
+
+static int qemu_find_netfilters_by_name(const char *id, NetFilterState **nfs,
+                                        int max)
+{
+    NetFilterState *nf;
+    int ret = 0;
+
+    QTAILQ_FOREACH(nf, &net_filters, global_list) {
+        if (!strcmp(nf->name, id)) {
+            if (ret < max) {
+                nfs[ret] = nf;
+            }
+            ret++;
+        }
+    }
+
+    return ret;
+}
+
+void qemu_del_net_filter(NetFilterState *nf)
+{
+    NetFilterState *nfs[MAX_QUEUE_NUM];
+    int queues, i;
+    QemuOpts *opts;
+
+    opts = qemu_opts_find(qemu_find_opts_err("netfilter", NULL), nf->name);
+
+    queues = qemu_find_netfilters_by_name(nf->name, nfs, MAX_QUEUE_NUM);
+    assert(queues != 0);
+
+    for (i = 0; i < queues; i++) {
+        qemu_cleanup_net_filter(nfs[i]);
+    }
+
+    qemu_opts_del(opts);
 }
 
 static NetFilterState *qemu_find_netfilter(const char *id)
@@ -66,6 +103,32 @@ static NetFilterState *qemu_find_netfilter(const char *id)
     }
 
     return NULL;
+}
+
+static int net_init_filter(void *dummy, QemuOpts *opts, Error **errp);
+void netfilter_add(QemuOpts *opts, Error **errp)
+{
+    net_init_filter(NULL, opts, errp);
+}
+
+static int net_filter_init1(const NetFilter *netfilter, Error **errp);
+void qmp_netfilter_add(NetFilter *data, Error **errp)
+{
+    net_filter_init1(data, errp);
+}
+
+void qmp_netfilter_del(const char *id, Error **errp)
+{
+    NetFilterState *nf;
+
+    nf = qemu_find_netfilter(id);
+    if (!nf) {
+        error_set(errp, ERROR_CLASS_DEVICE_NOT_FOUND,
+                  "Filter '%s' not found", id);
+        return;
+    }
+
+    qemu_del_net_filter(nf);
 }
 
 typedef int (NetFilterInit)(const NetFilter *netfilter,

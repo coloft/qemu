@@ -186,6 +186,20 @@ opts_end_struct(Visitor *v, Error **errp)
 }
 
 
+static void opts_start_implicit_struct(Visitor *v, void **obj,
+                                       size_t size, Error **errp)
+{
+    if (obj) {
+        *obj = g_malloc0(size);
+    }
+}
+
+
+static void opts_end_implicit_struct(Visitor *v, Error **errp)
+{
+}
+
+
 static GQueue *
 lookup_distinct(const OptsVisitor *ov, const char *name, Error **errp)
 {
@@ -507,6 +521,8 @@ opts_visitor_new(const QemuOpts *opts)
 
     ov->visitor.start_struct = &opts_start_struct;
     ov->visitor.end_struct   = &opts_end_struct;
+    ov->visitor.start_implicit_struct = &opts_start_implicit_struct;
+    ov->visitor.end_implicit_struct = &opts_end_implicit_struct;
 
     ov->visitor.start_list = &opts_start_list;
     ov->visitor.next_list  = &opts_next_list;

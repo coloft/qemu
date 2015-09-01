@@ -926,6 +926,61 @@ Example:
 EQMP
 
     {
+        .name       = "netfilter-add",
+        .args_type  = "data:q",
+        .mhandler.cmd_new = qmp_marshal_input_netfilter_add,
+    },
+
+SQMP
+netfilter-add
+----------
+
+Add a netfilter.
+
+Arguments:
+
+- "data": filter options (json-string)
+
+Example:
+
+-> { "execute": "netfilter-add",
+                "arguments": { "data": { "type": "buffer", "id": "nf0",
+                               "netdev": "bn",
+                               "chain": "in",
+                               "interval": 1000 } } }
+<- { "return": {} }
+
+Note: The supported filter options are the same ones supported by the
+      '-netfilter' command-line argument, which are listed in the '-help'
+      output or QEMU's manual
+
+EQMP
+
+    {
+        .name       = "netfilter-del",
+        .args_type  = "id:s",
+        .mhandler.cmd_new = qmp_marshal_input_netfilter_del,
+    },
+
+SQMP
+netfilter-del
+----------
+
+Remove a netfilter.
+
+Arguments:
+
+- "id": the netfilter's ID, must be unique (json-string)
+
+Example:
+
+-> { "execute": "netfilter_del", "arguments": { "id": "nf0" } }
+<- { "return": {} }
+
+
+EQMP
+
+    {
         .name       = "object-add",
         .args_type  = "qom-type:s,id:s,props:q?",
         .mhandler.cmd_new = qmp_object_add,

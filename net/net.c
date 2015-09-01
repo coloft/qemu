@@ -28,6 +28,7 @@
 #include "hub.h"
 #include "net/slirp.h"
 #include "net/eth.h"
+#include "net/filter.h"
 #include "util.h"
 
 #include "monitor/monitor.h"
@@ -385,6 +386,7 @@ void qemu_del_net_client(NetClientState *nc)
 {
     NetClientState *ncs[MAX_QUEUE_NUM];
     int queues, i;
+    NetFilterState *nf, *next;
 
     assert(nc->info->type != NET_CLIENT_OPTIONS_KIND_NIC);
 
@@ -395,6 +397,11 @@ void qemu_del_net_client(NetClientState *nc)
                                           NET_CLIENT_OPTIONS_KIND_NIC,
                                           MAX_QUEUE_NUM);
     assert(queues != 0);
+
+    /* qemu_del_net_filter() will handle the multiqueue case */
+    QTAILQ_FOREACH_SAFE(nf, &nc->filters, next, next) {
+        qemu_del_net_filter(nf);
+    }
 
     /* If there is a peer NIC, delete and cleanup client, but do not free. */
     if (nc->peer && nc->peer->info->type == NET_CLIENT_OPTIONS_KIND_NIC) {

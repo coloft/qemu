@@ -31,6 +31,7 @@
 #include "hw/loader.h"
 #include "exec/gdbstub.h"
 #include "net/net.h"
+#include "net/filter.h"
 #include "net/slirp.h"
 #include "sysemu/char.h"
 #include "ui/qemu-spice.h"
@@ -4193,6 +4194,21 @@ void netdev_add_completion(ReadLineState *rs, int nb_args, const char *str)
     }
 }
 
+void netfilter_add_completion(ReadLineState *rs, int nb_args, const char *str)
+{
+    size_t len;
+    int i;
+
+    if (nb_args != 2) {
+        return;
+    }
+    len = strlen(str);
+    readline_set_completion_index(rs, len);
+    for (i = 0; NetFilterType_lookup[i]; i++) {
+        add_completion_option(rs, str, NetFilterType_lookup[i]);
+    }
+}
+
 void device_add_completion(ReadLineState *rs, int nb_args, const char *str)
 {
     GSList *list, *elt;
@@ -4426,6 +4442,23 @@ void netdev_del_completion(ReadLineState *rs, int nb_args, const char *str)
         if (opts) {
             readline_add_completion(rs, name);
         }
+    }
+}
+
+void netfilter_del_completion(ReadLineState *rs, int nb_args, const char *str)
+{
+    int len;
+    QemuOpts *opts;
+
+    if (nb_args != 2) {
+        return;
+    }
+
+    len = strlen(str);
+    readline_set_completion_index(rs, len);
+    opts = qemu_opts_find(qemu_find_opts_err("netfilter", NULL), str);
+    if (opts) {
+        readline_add_completion(rs, str);
     }
 }
 
