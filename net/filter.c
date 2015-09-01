@@ -14,11 +14,13 @@
 #include "qapi/dealloc-visitor.h"
 #include "qemu/config-file.h"
 #include "qmp-commands.h"
+#include "qemu/iov.h"
 
 #include "net/filter.h"
 #include "net/net.h"
 #include "net/vhost_net.h"
 #include "filters.h"
+#include "net/queue.h"
 
 static QTAILQ_HEAD(, NetFilterState) net_filters;
 
@@ -129,6 +131,59 @@ void qmp_netfilter_del(const char *id, Error **errp)
     }
 
     qemu_del_net_filter(nf);
+}
+
+ssize_t qemu_netfilter_pass_to_next(NetFilterState *nf, NetPacket *packet)
+{
+    int ret = 0;
+    int chain;
+    NetFilterState *next = QTAILQ_NEXT(nf, next);
+    struct iovec iov = {
+        .iov_base = (void *)packet->data,
+        .iov_len = packet->size
+    };
+
+    if (!packet->sender || !packet->sender->peer) {
+        /* no receiver, or sender been deleted, no need to pass it further */
+        goto out;
+    }
+
+    if (nf->chain == NET_FILTER_ALL) {
+        if (packet->sender == nf->netdev) {
+            /* This packet is sent by netdev itself */
+            chain = NET_FILTER_OUT;
+        } else {
+            chain = NET_FILTER_IN;
+        }
+    } else {
+        chain = nf->chain;
+    }
+
+    while (next) {
+        if (next->chain == chain || next->chain == NET_FILTER_ALL) {
+            ret = next->info->receive_iov(next, packet->sender, packet->flags,
+                                          &iov, 1, packet->sent_cb);
+            if (ret) {
+                return ret;
+            }
+        }
+        next = QTAILQ_NEXT(next, next);
+    }
+
+    /*
+     * We have gone through all filters, pass it to receiver.
+     * Do the valid check again incase sender or receiver been
+     * deleted while we go through filters.
+     */
+    if (packet->sender && packet->sender->peer) {
+        return qemu_net_queue_send_iov(packet->sender->peer->incoming_queue,
+                                       packet->sender, packet->flags,
+                                       &iov, 1, packet->sent_cb);
+    }
+
+out:
+    /* no receiver, or sender been deleted */
+    return packet->size;
 }
 
 typedef int (NetFilterInit)(const NetFilter *netfilter,

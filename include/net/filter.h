@@ -56,4 +56,7 @@ NetFilterState *qemu_new_net_filter(NetFilterInfo *info,
 void qemu_del_net_filter(NetFilterState *nf);
 void netfilter_add(QemuOpts *opts, Error **errp);
 
+/* pass the packet to the next filter */
+ssize_t qemu_netfilter_pass_to_next(NetFilterState *nf, NetPacket *packet);
+
 #endif /* QEMU_NET_FILTER_H */
