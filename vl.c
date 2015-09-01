@@ -75,6 +75,7 @@ int main(int argc, char **argv)
 #include "monitor/qdev.h"
 #include "sysemu/bt.h"
 #include "net/net.h"
+#include "net/filter.h"
 #include "net/slirp.h"
 #include "monitor/monitor.h"
 #include "ui/console.h"
@@ -2998,6 +2999,7 @@ int main(int argc, char **argv, char **envp)
     qemu_add_opts(&qemu_device_opts);
     qemu_add_opts(&qemu_netdev_opts);
     qemu_add_opts(&qemu_net_opts);
+    qemu_add_opts(&qemu_netfilter_opts);
     qemu_add_opts(&qemu_rtc_opts);
     qemu_add_opts(&qemu_global_opts);
     qemu_add_opts(&qemu_mon_opts);
@@ -3281,6 +3283,13 @@ int main(int argc, char **argv, char **envp)
                 break;
             case QEMU_OPTION_net:
                 if (net_client_parse(qemu_find_opts("net"), optarg) == -1) {
+                    exit(1);
+                }
+                break;
+            case QEMU_OPTION_netfilter:
+                opts = qemu_opts_parse_noisily(qemu_find_opts("netfilter"),
+                                               optarg, true);
+                if (!opts) {
                     exit(1);
                 }
                 break;
@@ -4410,6 +4419,10 @@ int main(int argc, char **argv, char **envp)
     atexit(&net_cleanup);
 
     if (net_init_clients() < 0) {
+        exit(1);
+    }
+
+    if (net_init_filters() < 0) {
         exit(1);
     }
 

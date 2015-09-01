@@ -1991,6 +1991,27 @@ override the default configuration (@option{-net nic -net user}) which
 is activated if no @option{-net} options are provided.
 ETEXI
 
+DEF("netfilter", HAS_ARG, QEMU_OPTION_netfilter,
+    "-netfilter buffer,id=str,netdev=str[,chain=in|out|all,interval=t]\n"
+    "                buffer network packets on netdev. if interval provided, will release\n"
+    "                packets by interval. Interval scale: microsecond\n", QEMU_ARCH_ALL)
+STEXI
+@item -netfilter buffer,id=@var{id},netdev=@var{netdevid}[,chain=@var{in/out/all}][,interval=@var{t}]
+Buffer network packets on netdev @var{netdevid}.
+If interval @var{t} provided, will release packets by interval. Interval scale: microsecond.
+If interval @var{t} not provided, you have to make sure the packets can be released,
+either by manually remove this filter or call the release buffer API, otherwise,
+the packets will be buffered forever. Use with caution.
+
+chain @var{in/out/all} is an option that can be applied to any netfilter, default is @option{all}.
+
+@option{in} means this filter will receive packets sent to the netdev
+
+@option{out} means this filter will receive packets sent from the netdev
+
+@option{all} means this filter will receive packets both sent to/from the netdev
+ETEXI
+
 STEXI
 @end table
 ETEXI

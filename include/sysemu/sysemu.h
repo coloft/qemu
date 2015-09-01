@@ -212,6 +212,7 @@ extern QemuOptsList qemu_chardev_opts;
 extern QemuOptsList qemu_device_opts;
 extern QemuOptsList qemu_netdev_opts;
 extern QemuOptsList qemu_net_opts;
+extern QemuOptsList qemu_netfilter_opts;
 extern QemuOptsList qemu_global_opts;
 extern QemuOptsList qemu_mon_opts;
 
