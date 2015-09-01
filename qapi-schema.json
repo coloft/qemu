@@ -2566,14 +2566,20 @@
 { 'command': 'netfilter-del', 'data': {'id': 'str'} }
 
 ##
-# @NetFilterDummyOptions:
+# @NetFilterBufferOptions
 #
-# An dummy filter for network backend
+# a netbuffer filter for network backend.
 #
-# Since: 2.5
+# @interval: #optional release packets by interval, if no interval supplied,
+#            packets will be buffered forever unless internal APIs been called
+#            to release the packets or filter been removed. Use with caution.
+#            scale: microsecond
+#
+# Since 2.5
 ##
-{ 'struct': 'NetFilterDummyOptions',
-  'data': { } }
+{ 'struct': 'NetFilterBufferOptions',
+  'data': {
+    '*interval':     'uint32' } }
 
 ##
 # @NetFilterType:
@@ -2583,7 +2589,7 @@
 # Since: 2.5
 ##
 { 'enum': 'NetFilterType',
-  'data': ['dummy'] }
+  'data': ['buffer'] }
 
 ##
 # @NetFilterBase
@@ -2623,7 +2629,7 @@
   'base': 'NetFilterBase',
   'discriminator': 'type',
   'data': {
-    'dummy': 'NetFilterDummyOptions' } }
+    'buffer': 'NetFilterBufferOptions' } }
 
 ##
 # @InetSocketAddress

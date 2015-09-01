@@ -21,6 +21,7 @@
 #include "net/vhost_net.h"
 #include "filters.h"
 #include "net/queue.h"
+#include "filters.h"
 
 static QTAILQ_HEAD(, NetFilterState) net_filters;
 
@@ -214,7 +215,7 @@ typedef int (NetFilterInit)(const NetFilter *netfilter,
 
 static
 NetFilterInit * const net_filter_init_fun[NET_FILTER_TYPE_MAX] = {
-    [NET_FILTER_TYPE_DUMMY] = net_init_filter_dummy,
+    [NET_FILTER_TYPE_BUFFER] = net_init_filter_buffer,
 };
 
 static int net_filter_init1(const NetFilter *netfilter, Error **errp)

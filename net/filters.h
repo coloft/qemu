@@ -11,13 +11,7 @@
 #include "net/net.h"
 #include "net/filter.h"
 
-int net_init_filter_dummy(const NetFilter *netfilter, const char *name,
-                          int chain, NetClientState *netdev, Error **errp);
-
-int net_init_filter_dummy(const NetFilter *netfilter, const char *name,
-                          int chain, NetClientState *netdev, Error **errp)
-{
-    return 0;
-}
+int net_init_filter_buffer(const NetFilter *netfilter, const char *name,
+                           int chain, NetClientState *netdev, Error **errp);
 
 #endif /* QEMU_NET_FILTERS_H */
