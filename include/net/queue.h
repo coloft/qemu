@@ -55,6 +55,13 @@ struct NetQueue {
 
 NetQueue *qemu_new_net_queue(void *opaque);
 
+void qemu_net_queue_append_iov(NetQueue *queue,
+                               NetClientState *sender,
+                               unsigned flags,
+                               const struct iovec *iov,
+                               int iovcnt,
+                               NetPacketSent *sent_cb);
+
 void qemu_del_net_queue(NetQueue *queue);
 
 ssize_t qemu_net_queue_send(NetQueue *queue,
