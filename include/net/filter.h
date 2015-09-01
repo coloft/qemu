@@ -42,6 +42,7 @@ typedef struct NetFilterInfo {
 struct NetFilterState {
     NetFilterInfo *info;
     char *name;
+    char *model;
     NetClientState *netdev;
     int chain;
     QTAILQ_ENTRY(NetFilterState) global_list;
@@ -52,6 +53,7 @@ int net_init_filters(void);
 NetFilterState *qemu_new_net_filter(NetFilterInfo *info,
                                     NetClientState *netdev,
                                     const char *name,
+                                    const char *model,
                                     int chain);
 void qemu_del_net_filter(NetFilterState *nf);
 void netfilter_add(QemuOpts *opts, Error **errp);

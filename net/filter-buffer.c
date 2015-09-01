@@ -110,7 +110,8 @@ int net_init_filter_buffer(const NetFilter *netfilter, const char *name,
         return -1;
     }
 
-    nf = qemu_new_net_filter(&net_filter_buffer_info, netdev, name, chain);
+    nf = qemu_new_net_filter(&net_filter_buffer_info, netdev, name,
+                             "buffer", chain);
     s = DO_UPCAST(FilterBufferState, nf, nf);
     s->incoming_queue = qemu_new_net_queue(nf);
     s->interval = interval;

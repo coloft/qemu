@@ -50,6 +50,7 @@ const char *qemu_netfilter_get_chain_str(int chain)
 NetFilterState *qemu_new_net_filter(NetFilterInfo *info,
                                     NetClientState *netdev,
                                     const char *name,
+                                    const char *model,
                                     int chain)
 {
     NetFilterState *nf;
@@ -60,6 +61,7 @@ NetFilterState *qemu_new_net_filter(NetFilterInfo *info,
     nf = g_malloc0(info->size);
     nf->info = info;
     nf->name = g_strdup(name);
+    nf->model = g_strdup(model);
     nf->netdev = netdev;
     nf->chain = chain;
     QTAILQ_INSERT_TAIL(&net_filters, nf, global_list);
