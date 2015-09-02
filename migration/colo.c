@@ -22,6 +22,7 @@
 #include "qmp-commands.h"
 #include "qapi-types.h"
 #include "block/block_int.h"
+#include "net/filter.h"
 
 /*
  * The delay time before qemu begin the procedure of default failover treatment.
@@ -316,6 +317,8 @@ static int colo_do_checkpoint_transaction(MigrationState *s,
     if (ret < 0) {
         goto out;
     }
+
+    filter_buffer_release_all();
 
     if (colo_shutdown) {
         qemu_mutex_lock_iothread();
