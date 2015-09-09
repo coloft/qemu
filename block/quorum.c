@@ -66,6 +66,9 @@ typedef struct QuorumVotes {
 typedef struct BDRVQuorumState {
     BlockDriverState **bs; /* children BlockDriverStates */
     int num_children;      /* children count */
+    int max_children;      /* The maximum children count, we need to reallocate
+                            * bs if num_children grows larger than maximum.
+                            */
     int threshold;         /* if less than threshold children reads gave the
                             * same result a quorum error occurs.
                             */
@@ -874,9 +877,9 @@ static int quorum_open(BlockDriverState *bs, QDict *options, int flags,
         ret = -EINVAL;
         goto exit;
     }
-    if (s->num_children < 2) {
+    if (s->num_children < 1) {
         error_setg(&local_err,
-                   "Number of provided children must be greater than 1");
+                   "Number of provided children must be 1 or more");
         ret = -EINVAL;
         goto exit;
     }
@@ -925,6 +928,7 @@ static int quorum_open(BlockDriverState *bs, QDict *options, int flags,
     /* allocate the children BlockDriverState array */
     s->bs = g_new0(BlockDriverState *, s->num_children);
     opened = g_new0(bool, s->num_children);
+    s->max_children = s->num_children;
 
     for (i = 0; i < s->num_children; i++) {
         char indexstr[32];
@@ -995,6 +999,67 @@ static void quorum_attach_aio_context(BlockDriverState *bs,
     }
 }
 
+static void quorum_add_child(BlockDriverState *bs, BlockDriverState *child_bs,
+                             Error **errp)
+{
+    BDRVQuorumState *s = bs->opaque;
+
+    bdrv_drain(bs);
+
+    if (s->num_children == s->max_children) {
+        if (s->max_children >= INT_MAX) {
+            error_setg(errp, "Too many children");
+            return;
+        }
+
+        s->bs = g_renew(BlockDriverState *, s->bs, s->max_children + 1);
+        s->bs[s->num_children] = NULL;
+        s->max_children++;
+    }
+
+    bdrv_ref(child_bs);
+    bdrv_attach_child(bs, child_bs, &child_format);
+    s->bs[s->num_children++] = child_bs;
+}
+
+static void quorum_del_child(BlockDriverState *bs, BlockDriverState *child_bs,
+                             Error **errp)
+{
+    BDRVQuorumState *s = bs->opaque;
+    BdrvChild *child;
+    int i;
+
+    for (i = 0; i < s->num_children; i++) {
+        if (s->bs[i] == child_bs) {
+            break;
+        }
+    }
+
+    QLIST_FOREACH(child, &bs->children, next) {
+        if (child->bs == child_bs) {
+            break;
+        }
+    }
+
+    /* we have checked it in bdrv_del_child() */
+    assert(i < s->num_children && child);
+
+    if (s->num_children <= s->threshold) {
+        error_setg(errp,
+            "The number of children cannot be lower than the vote threshold %d",
+            s->threshold);
+        return;
+    }
+
+    bdrv_drain(bs);
+    /* We can safely remove this child now */
+    memmove(&s->bs[i], &s->bs[i + 1],
+            (s->num_children - i - 1) * sizeof(void *));
+    s->num_children--;
+    s->bs[s->num_children] = NULL;
+    bdrv_unref_child(bs, child);
+}
+
 static void quorum_refresh_filename(BlockDriverState *bs)
 {
     BDRVQuorumState *s = bs->opaque;
@@ -1048,6 +1113,9 @@ static BlockDriver bdrv_quorum = {
 
     .bdrv_detach_aio_context            = quorum_detach_aio_context,
     .bdrv_attach_aio_context            = quorum_attach_aio_context,
+
+    .bdrv_add_child                     = quorum_add_child,
+    .bdrv_del_child                     = quorum_del_child,
 
     .is_filter                          = true,
     .bdrv_recurse_is_first_non_filter   = quorum_recurse_is_first_non_filter,
