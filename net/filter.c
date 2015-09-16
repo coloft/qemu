@@ -15,6 +15,21 @@
 #include "net/vhost_net.h"
 #include "qom/object_interfaces.h"
 
+ssize_t qemu_netfilter_receive(NetFilterState *nf, NetFilterChain chain,
+                               NetClientState *sender,
+                               unsigned flags,
+                               const struct iovec *iov,
+                               int iovcnt,
+                               NetPacketSent *sent_cb)
+{
+    if (nf->chain == chain || nf->chain == NET_FILTER_CHAIN_ALL) {
+        return NETFILTER_GET_CLASS(OBJECT(nf))->receive_iov(
+                                   nf, sender, flags, iov, iovcnt, sent_cb);
+    }
+
+    return 0;
+}
+
 static char *netfilter_get_netdev_id(Object *obj, Error **errp)
 {
     NetFilterState *nf = NETFILTER(obj);
