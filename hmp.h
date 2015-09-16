@@ -130,5 +130,7 @@ void hmp_rocker(Monitor *mon, const QDict *qdict);
 void hmp_rocker_ports(Monitor *mon, const QDict *qdict);
 void hmp_rocker_of_dpa_flows(Monitor *mon, const QDict *qdict);
 void hmp_rocker_of_dpa_groups(Monitor *mon, const QDict *qdict);
+void hmp_blockdev_child_add(Monitor *mon, const QDict *qdict);
+void hmp_blockdev_child_del(Monitor *mon, const QDict *qdict);
 
 #endif
