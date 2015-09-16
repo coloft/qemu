@@ -2325,3 +2325,23 @@ void hmp_rocker_of_dpa_groups(Monitor *mon, const QDict *qdict)
 
     qapi_free_RockerOfDpaGroupList(list);
 }
+
+void hmp_blockdev_child_add(Monitor *mon, const QDict *qdict)
+{
+    const char *id = qdict_get_str(qdict, "id");
+    const char *child_id = qdict_get_str(qdict, "child");
+    Error *local_err = NULL;
+
+    qmp_x_blockdev_child_add(id, child_id, &local_err);
+    hmp_handle_error(mon, &local_err);
+}
+
+void hmp_blockdev_child_del(Monitor *mon, const QDict *qdict)
+{
+    const char *id = qdict_get_str(qdict, "id");
+    const char *child_id = qdict_get_str(qdict, "child");
+    Error *local_err = NULL;
+
+    qmp_x_blockdev_child_del(id, child_id, &local_err);
+    hmp_handle_error(mon, &local_err);
+}

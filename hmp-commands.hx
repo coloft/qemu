@@ -193,6 +193,34 @@ actions (drive options rerror, werror).
 ETEXI
 
     {
+        .name       = "blockdev_child_add",
+        .args_type  = "id:B,child:B",
+        .params     = "parent child",
+        .help       = "add a child to a BDS",
+        .mhandler.cmd = hmp_blockdev_child_add,
+    },
+
+STEXI
+@item blockdev_child_add @var{parent} @var{child}
+@findex blockdev_child_add
+Add a child to the block device.
+ETEXI
+
+    {
+        .name       = "blockdev_child_del",
+        .args_type  = "id:B,child:B",
+        .params     = "parent child",
+        .help       = "remove a child from a BDS",
+        .mhandler.cmd = hmp_blockdev_child_del,
+    },
+
+STEXI
+@item blockdev_child_del @var{parent} @var{child}
+@findex blockdev_child_del
+Remove a child from the parent device.
+ETEXI
+
+    {
         .name       = "change",
         .args_type  = "device:B,target:F,arg:s?",
         .params     = "device filename [format]",
