@@ -2552,6 +2552,24 @@
     'opts': 'NetClientOptions' } }
 
 ##
+# @NetFilterChain
+#
+# netfilter chain, a netfilter is attached to a netdev, captures the
+# network packets of the netdev.
+#
+# @all: the filter will receive packets both sent to/from the netdev, this
+#       is the default chain.
+#
+# @in: the filter will receive packets sent to the netdev.
+#
+# @out: the filter will receive packets sent from the netdev.
+#
+# Since 2.5
+##
+{ 'enum': 'NetFilterChain',
+  'data': [ 'all', 'in', 'out' ] }
+
+##
 # @InetSocketAddress
 #
 # Captures a socket address or address range in the Internet namespace.
