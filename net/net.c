@@ -597,36 +597,6 @@ static ssize_t filter_receive(NetClientState *nc, NetFilterChain chain,
     return filter_receive_iov(nc, chain, sender, flags, &iov, 1, sent_cb);
 }
 
-ssize_t qemu_deliver_packet(NetClientState *sender,
-                            unsigned flags,
-                            const uint8_t *data,
-                            size_t size,
-                            void *opaque)
-{
-    NetClientState *nc = opaque;
-    ssize_t ret;
-
-    if (nc->link_down) {
-        return size;
-    }
-
-    if (nc->receive_disabled) {
-        return 0;
-    }
-
-    if (flags & QEMU_NET_PACKET_FLAG_RAW && nc->info->receive_raw) {
-        ret = nc->info->receive_raw(nc, data, size);
-    } else {
-        ret = nc->info->receive(nc, data, size);
-    }
-
-    if (ret == 0) {
-        nc->receive_disabled = 1;
-    }
-
-    return ret;
-}
-
 void qemu_purge_queued_packets(NetClientState *nc)
 {
     if (!nc->peer) {
@@ -717,14 +687,18 @@ ssize_t qemu_send_packet_raw(NetClientState *nc, const uint8_t *buf, int size)
 }
 
 static ssize_t nc_sendv_compat(NetClientState *nc, const struct iovec *iov,
-                               int iovcnt)
+                               int iovcnt, unsigned flags)
 {
     uint8_t buffer[NET_BUFSIZE];
     size_t offset;
 
     offset = iov_to_buf(iov, iovcnt, 0, buffer, sizeof(buffer));
 
-    return nc->info->receive(nc, buffer, offset);
+    if (flags & QEMU_NET_PACKET_FLAG_RAW && nc->info->receive_raw) {
+        return nc->info->receive_raw(nc, buffer, offset);
+    } else {
+        return nc->info->receive(nc, buffer, offset);
+    }
 }
 
 ssize_t qemu_deliver_packet_iov(NetClientState *sender,
@@ -747,7 +721,7 @@ ssize_t qemu_deliver_packet_iov(NetClientState *sender,
     if (nc->info->receive_iov) {
         ret = nc->info->receive_iov(nc, iov, iovcnt);
     } else {
-        ret = nc_sendv_compat(nc, iov, iovcnt);
+        ret = nc_sendv_compat(nc, iov, iovcnt, flags);
     }
 
     if (ret == 0) {
