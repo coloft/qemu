@@ -339,6 +339,7 @@ struct BdrvChild {
     BlockDriverState *bs;
     const BdrvChildRole *role;
     QLIST_ENTRY(BdrvChild) next;
+    QLIST_ENTRY(BdrvChild) next_parent;
 };
 
 /*
@@ -446,6 +447,7 @@ struct BlockDriverState {
      * parent node of this node. */
     BlockDriverState *inherits_from;
     QLIST_HEAD(, BdrvChild) children;
+    QLIST_HEAD(, BdrvChild) parents;
 
     QDict *options;
     BlockdevDetectZeroesOptions detect_zeroes;
