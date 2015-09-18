@@ -2102,8 +2102,9 @@ void qmp_blockdev_insert_medium(const char *device, const char *node_name,
     qmp_blockdev_insert_anon_medium(device, bs, errp);
 }
 
-void qmp_change_blockdev(const char *device, const char *filename,
-                         const char *format, Error **errp)
+void qmp_blockdev_change_medium(const char *device, const char *filename,
+                                bool has_format, const char *format,
+                                Error **errp)
 {
     BlockBackend *blk;
     BlockBackendRootState *blk_rs;
@@ -2127,7 +2128,7 @@ void qmp_change_blockdev(const char *device, const char *filename,
     bdrv_flags = blk_rs->read_only ? 0 : BDRV_O_RDWR;
     bdrv_flags |= blk_rs->open_flags & ~BDRV_O_RDWR;
 
-    if (format) {
+    if (has_format) {
         options = qdict_new();
         qdict_put(options, "driver", qstring_from_str(format));
     }
