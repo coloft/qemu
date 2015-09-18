@@ -1076,6 +1076,10 @@ static int bdrv_fill_options(QDict **options, const char **pfilename,
         }
     }
 
+    if (runstate_check(RUN_STATE_INMIGRATE)) {
+        *flags |= BDRV_O_INCOMING;
+    }
+
     return 0;
 }
 
