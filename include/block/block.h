@@ -613,6 +613,4 @@ void bdrv_io_plug(BlockDriverState *bs);
 void bdrv_io_unplug(BlockDriverState *bs);
 void bdrv_flush_io_queue(BlockDriverState *bs);
 
-BlockAcctStats *bdrv_get_stats(BlockDriverState *bs);
-
 #endif
