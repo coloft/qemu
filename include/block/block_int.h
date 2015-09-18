@@ -449,6 +449,16 @@ struct BlockDriverState {
     NotifierWithReturn write_threshold_notifier;
 };
 
+struct BlockBackendRootState {
+    int open_flags;
+    bool read_only;
+    BlockdevDetectZeroesOptions detect_zeroes;
+
+    bool io_limits_enabled;
+    ThrottleConfig throttle_config;
+    char *throttle_group_name;
+};
+
 
 /* Essential block drivers which must always be statically linked into qemu, and
  * which therefore can be accessed without using bdrv_find_format() */
