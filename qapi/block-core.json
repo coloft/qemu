@@ -2114,3 +2114,37 @@
 ##
 { 'command': 'block-set-write-threshold',
   'data': { 'node-name': 'str', 'write-threshold': 'uint64' } }
+
+##
+# @x-blockdev-child-add
+#
+# Add a new child to the parent BDS. Currently only the Quorum driver
+# implements this feature. This is useful to fix a broken quorum child.
+#
+# @parent: graph node name or id which the child will be added to.
+#
+# @child: graph node name that will be added.
+#
+# Note: this command is experimental, and not a stable API.
+#
+# Since: 2.5
+##
+{ 'command': 'x-blockdev-child-add',
+  'data' : { 'parent': 'str', 'child': 'str' } }
+
+##
+# @x-blockdev-child-del
+#
+# Remove a child from the parent BDS. Currently only the Quorum driver
+# implements this feature. This is useful to fix a broken quorum child.
+# Note, you can't remove a child if it would bring the quorum below its
+# threshold.
+#
+# @parent: graph node name or id from which the child will removed.
+#
+# @child: graph node name that will be removed.
+#
+# Since: 2.5
+##
+{ 'command': 'x-blockdev-child-del',
+  'data' : { 'parent': 'str', 'child': 'str' } }
