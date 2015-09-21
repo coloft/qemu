@@ -3086,6 +3086,54 @@ fail:
     qmp_output_visitor_cleanup(ov);
 }
 
+void qmp_x_blockdev_child_add(const char *parent, const char *child,
+                              Error **errp)
+{
+    BlockDriverState *parent_bs, *child_bs;
+    Error *local_err = NULL;
+
+    parent_bs = bdrv_lookup_bs(parent, parent, &local_err);
+    if (!parent_bs) {
+        error_propagate(errp, local_err);
+        return;
+    }
+
+    child_bs = bdrv_find_node(child);
+    if (!child_bs) {
+        error_setg(errp, "Node '%s' not found", child);
+        return;
+    }
+
+    bdrv_add_child(parent_bs, child_bs, &local_err);
+    if (local_err) {
+        error_propagate(errp, local_err);
+    }
+}
+
+void qmp_x_blockdev_child_del(const char *parent, const char *child,
+                              Error **errp)
+{
+    BlockDriverState *parent_bs, *child_bs;
+    Error *local_err = NULL;
+
+    parent_bs = bdrv_lookup_bs(parent, parent, &local_err);
+    if (!parent_bs) {
+        error_propagate(errp, local_err);
+        return;
+    }
+
+    child_bs = bdrv_find_node(child);
+    if (!child_bs) {
+        error_setg(errp, "Node '%s' not found", child);
+        return;
+    }
+
+    bdrv_del_child(parent_bs, child_bs, &local_err);
+    if (local_err) {
+        error_propagate(errp, local_err);
+    }
+}
+
 BlockJobInfoList *qmp_query_block_jobs(Error **errp)
 {
     BlockJobInfoList *head = NULL, **p_next = &head;
