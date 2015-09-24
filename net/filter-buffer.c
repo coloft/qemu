@@ -14,6 +14,7 @@
 #include "qapi/qmp/qerror.h"
 #include "qapi-visit.h"
 #include "qom/object.h"
+#include "net/net.h"
 
 #define TYPE_FILTER_BUFFER "filter-buffer"
 
@@ -88,16 +89,6 @@ static void filter_buffer_setup(NetFilterState *nf, Error **errp)
 {
     FilterBufferState *s = FILTER_BUFFER(nf);
 
-    /*
-     * this check should be dropped when there're VM FT solutions like MC
-     * or COLO use this filter to release packets on demand.
-     */
-    if (!s->interval) {
-        error_setg(errp, QERR_INVALID_PARAMETER_VALUE, "interval",
-                   "a non-zero interval");
-        return;
-    }
-
     s->incoming_queue = qemu_new_net_queue(qemu_netfilter_pass_to_next, nf);
     if (s->interval) {
         timer_init_us(&s->release_timer, QEMU_CLOCK_VIRTUAL,
@@ -168,3 +159,17 @@ static void register_types(void)
 }
 
 type_init(register_types);
+
+/* public APIs */
+void filter_buffer_release_all(void)
+{
+    NetFilterState *nfs[MAX_QUEUE_NUM];
+    int queues, i;
+
+    queues = qemu_find_netfilters_by_type(TYPE_FILTER_BUFFER, nfs,
+                                          MAX_QUEUE_NUM);
+
+    for (i = 0; i < queues; i++) {
+        filter_buffer_flush(nfs[i]);
+    }
+}

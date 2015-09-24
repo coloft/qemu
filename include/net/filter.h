@@ -77,4 +77,7 @@ ssize_t qemu_netfilter_pass_to_next(NetClientState *sender,
 int qemu_find_netfilters_by_type(const char *type, NetFilterState **nfs,
                                   int max);
 
+/* buffer filter */
+void filter_buffer_release_all(void);
+
 #endif /* QEMU_NET_FILTER_H */
