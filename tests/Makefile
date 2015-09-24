@@ -189,6 +189,7 @@ check-qtest-i386-y += tests/pc-cpu-test$(EXESUF)
 check-qtest-i386-y += tests/q35-test$(EXESUF)
 gcov-files-i386-y += hw/pci-host/q35.c
 check-qtest-i386-$(CONFIG_LINUX) += tests/vhost-user-test$(EXESUF)
+check-qtest-i386-y += tests/test-netfilter$(EXESUF)
 check-qtest-x86_64-y = $(check-qtest-i386-y)
 gcov-files-i386-y += i386-softmmu/hw/timer/mc146818rtc.c
 gcov-files-x86_64-y = $(subst i386-softmmu/,x86_64-softmmu/,$(gcov-files-i386-y))
@@ -435,6 +436,7 @@ tests/vhost-user-test$(EXESUF): tests/vhost-user-test.o qemu-char.o qemu-timer.o
 tests/qemu-iotests/socket_scm_helper$(EXESUF): tests/qemu-iotests/socket_scm_helper.o
 tests/test-qemu-opts$(EXESUF): tests/test-qemu-opts.o $(test-util-obj-y)
 tests/test-write-threshold$(EXESUF): tests/test-write-threshold.o $(test-block-obj-y)
+tests/test-netfilter$(EXESUF): tests/test-netfilter.o $(qtest-obj-y)
 
 ifeq ($(CONFIG_POSIX),y)
 LIBS += -lutil
