@@ -23,6 +23,7 @@
  */
 
 #include "trace.h"
+#include "sysemu/block-backend.h"
 #include "block/blockjob.h"
 #include "block/block_int.h"
 #include "block/throttle-groups.h"
@@ -1141,7 +1142,9 @@ static int coroutine_fn bdrv_aligned_pwritev(BlockDriverState *bs,
 
     bdrv_set_dirty(bs, sector_num, nb_sectors);
 
-    block_acct_highest_sector(&bs->stats, sector_num, nb_sectors);
+    if (bs->wr_highest_offset < offset + bytes) {
+        bs->wr_highest_offset = offset + bytes;
+    }
 
     if (ret >= 0) {
         bs->total_sectors = MAX(bs->total_sectors, sector_num + nb_sectors);
@@ -1893,7 +1896,10 @@ static int multiwrite_merge(BlockDriverState *bs, BlockRequest *reqs,
         }
     }
 
-    block_acct_merge_done(&bs->stats, BLOCK_ACCT_WRITE, num_reqs - outidx - 1);
+    if (bs->blk) {
+        block_acct_merge_done(blk_get_stats(bs->blk), BLOCK_ACCT_WRITE,
+                              num_reqs - outidx - 1);
+    }
 
     return outidx + 1;
 }
