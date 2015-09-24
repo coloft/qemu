@@ -57,6 +57,7 @@ struct NetFilterState {
     NetFilterChain chain;
     char info_str[256];
     QTAILQ_ENTRY(NetFilterState) next;
+    QTAILQ_ENTRY(NetFilterState) global_list;
 };
 
 ssize_t qemu_netfilter_receive(NetFilterState *nf, NetFilterChain chain,

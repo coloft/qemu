@@ -17,6 +17,8 @@
 #include "qemu/iov.h"
 #include "qapi/string-output-visitor.h"
 
+static QTAILQ_HEAD(, NetFilterState) net_filters;
+
 ssize_t qemu_netfilter_receive(NetFilterState *nf, NetFilterChain chain,
                                NetClientState *sender,
                                unsigned flags,
@@ -138,6 +140,9 @@ static void netfilter_finalize(Object *obj)
     if (nf->netdev && !QTAILQ_EMPTY(&nf->netdev->filters)) {
         QTAILQ_REMOVE(&nf->netdev->filters, nf, next);
     }
+    if (!QTAILQ_EMPTY(&net_filters)) {
+        QTAILQ_REMOVE(&net_filters, nf, global_list);
+    }
 
     g_free(nf->name);
 }
@@ -192,6 +197,7 @@ static void netfilter_complete(UserCreatable *uc, Error **errp)
         }
     }
     QTAILQ_INSERT_TAIL(&nf->netdev->filters, nf, next);
+    QTAILQ_INSERT_TAIL(&net_filters, nf, global_list);
 
     if (queues > 1) {
         /*
@@ -259,6 +265,7 @@ static void netfilter_complete(UserCreatable *uc, Error **errp)
             }
         }
         QTAILQ_INSERT_TAIL(&nfq->netdev->filters, nfq, next);
+        QTAILQ_INSERT_TAIL(&net_filters, nf, global_list);
         object_unref(obj);
     }
 
@@ -300,6 +307,7 @@ static const TypeInfo netfilter_info = {
 
 static void register_types(void)
 {
+    QTAILQ_INIT(&net_filters);
     type_register_static(&netfilter_info);
 }
 
