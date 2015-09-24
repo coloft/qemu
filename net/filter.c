@@ -19,6 +19,24 @@
 
 static QTAILQ_HEAD(, NetFilterState) net_filters;
 
+int qemu_find_netfilters_by_type(const char *type, NetFilterState **nfs,
+                                  int max)
+{
+    NetFilterState *nf;
+    int ret = 0;
+
+    QTAILQ_FOREACH(nf, &net_filters, global_list) {
+        if (!strcmp(object_get_typename(OBJECT(nf)), type)) {
+            if (ret < max) {
+                nfs[ret] = nf;
+            }
+            ret++;
+        }
+    }
+
+    return ret;
+}
+
 ssize_t qemu_netfilter_receive(NetFilterState *nf, NetFilterChain chain,
                                NetClientState *sender,
                                unsigned flags,
