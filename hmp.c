@@ -2346,3 +2346,41 @@ void hmp_rocker_of_dpa_groups(Monitor *mon, const QDict *qdict)
 
     qapi_free_RockerOfDpaGroupList(list);
 }
+
+void hmp_blockdev_change(Monitor *mon, const QDict *qdict)
+{
+    const char *operation = qdict_get_str(qdict, "op");
+    const char *parent = qdict_get_str(qdict, "parent");
+    const char *child = qdict_get_try_str(qdict, "child");
+    const char *node = qdict_get_try_str(qdict, "node");
+    ChangeOperation op = CHANGE_OPERATION_ADD;
+    Error *local_err = NULL;
+    bool has_child = !!child;
+    bool has_node = !!node;
+
+    while (ChangeOperation_lookup[op] != NULL) {
+        if (strcmp(ChangeOperation_lookup[op], operation) == 0) {
+            break;
+        }
+        op++;
+    }
+
+    if (ChangeOperation_lookup[op] == NULL) {
+        error_setg(&local_err, "Invalid parameter '%s'", "operation");
+        goto out;
+    }
+
+    /*
+     * FIXME: we must specify the parameter child, otherwise,
+     * we can't specify the parameter node.
+     */
+    if (op == CHANGE_OPERATION_ADD) {
+        has_child = false;
+    }
+
+    qmp_x_blockdev_change(op, parent, has_child, child,
+                          has_node, node, &local_err);
+
+out:
+    hmp_handle_error(mon, &local_err);
+}

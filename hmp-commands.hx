@@ -193,6 +193,23 @@ actions (drive options rerror, werror).
 ETEXI
 
     {
+        .name       = "blockdev_change",
+        .args_type  = "op:s,parent:B,child:B?,node:?",
+        .params     = "operation parent [child] [node]",
+        .help       = "Dynamic reconfigure the block driver state graph",
+        .mhandler.cmd = hmp_blockdev_change,
+    },
+
+STEXI
+@item blockdev_change @var{operation} @var{parent} [@var{child}] [@var{node}]
+@findex blockdev_change
+Dynamic reconfigure the block driver state graph. It can be used to
+add, remove, insert, replace a block driver state. Currently only
+the Quorum driver implements this feature to add and remove its child.
+This is useful to fix a broken quorum child.
+ETEXI
+
+    {
         .name       = "change",
         .args_type  = "device:B,target:F,arg:s?",
         .params     = "device filename [format]",
