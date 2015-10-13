@@ -2118,3 +2118,43 @@
 ##
 { 'command': 'block-set-write-threshold',
   'data': { 'node-name': 'str', 'write-threshold': 'uint64' } }
+
+##
+# @ChangeOperation:
+#
+# An enumeration of block device change operation.
+#
+# @add: Add a new block driver state to a existed block driver state.
+#
+# @delete: Delete a block driver state's child.
+#
+# Since: 2.5
+##
+{ 'enum': 'ChangeOperation',
+  'data': [ 'add', 'delete' ] }
+
+##
+# @x-blockdev-change
+#
+# Dynamic reconfigure the block driver state graph. It can be used to
+# add, remove, insert, replace a block driver state. Currently only
+# the Quorum driver implements this feature to add and remove its child.
+# This is useful to fix a broken quorum child.
+#
+# @operation: the chanage operation. It can be add, delete.
+#
+# @parent: the id or node name of which node will be changed.
+#
+# @child: the child node-name which will be deleted.
+#
+# @node: the new node-name which will be added.
+#
+# Note: this command is experimental, and not a stable API.
+#
+# Since: 2.5
+##
+{ 'command': 'x-blockdev-change',
+  'data' : { 'operation': 'ChangeOperation',
+             'parent': 'str',
+             '*child': 'str',
+             '*node': 'str' } }
