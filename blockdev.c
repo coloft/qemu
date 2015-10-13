@@ -3274,6 +3274,82 @@ fail:
     qmp_output_visitor_cleanup(ov);
 }
 
+void qmp_x_blockdev_change(ChangeOperation op, const char *parent,
+                           bool has_child, const char *child,
+                           bool has_new_node, const char *new_node,
+                           Error **errp)
+{
+    BlockDriverState *parent_bs, *child_bs = NULL, *new_bs = NULL;
+    Error *local_err = NULL;
+
+    parent_bs = bdrv_lookup_bs(parent, parent, &local_err);
+    if (!parent_bs) {
+        error_propagate(errp, local_err);
+        return;
+    }
+
+    switch(op) {
+    case CHANGE_OPERATION_ADD:
+        if (has_child) {
+            error_setg(errp, "The operation %s doesn't support the parameter child",
+                       ChangeOperation_lookup[op]);
+            return;
+        }
+        if (!has_new_node) {
+            error_setg(errp, "The operation %s needs the parameter new_node",
+                       ChangeOperation_lookup[op]);
+            return;
+        }
+        break;
+    case CHANGE_OPERATION_DELETE:
+        if (has_new_node) {
+            error_setg(errp, "The operation %s doesn't support the parameter node",
+                       ChangeOperation_lookup[op]);
+            return;
+        }
+        if (!has_child) {
+            error_setg(errp, "The operation %s needs the parameter child",
+                       ChangeOperation_lookup[op]);
+            return;
+        }
+    default:
+        break;
+    }
+
+    if (has_child) {
+        child_bs = bdrv_find_node(child);
+        if (!child_bs) {
+            error_setg(errp, "Node '%s' not found", child);
+            return;
+        }
+    }
+
+    if (has_new_node) {
+        new_bs = bdrv_find_node(new_node);
+        if (!new_bs) {
+            error_setg(errp, "Node '%s' not found", new_node);
+            return;
+        }
+    }
+
+    switch(op) {
+    case CHANGE_OPERATION_ADD:
+        bdrv_add_child(parent_bs, new_bs, &local_err);
+        if (local_err) {
+            error_propagate(errp, local_err);
+        }
+        break;
+    case CHANGE_OPERATION_DELETE:
+        bdrv_del_child(parent_bs, child_bs, &local_err);
+        if (local_err) {
+            error_propagate(errp, local_err);
+        }
+        break;
+    default:
+        break;
+    }
+}
+
 BlockJobInfoList *qmp_query_block_jobs(Error **errp)
 {
     BlockJobInfoList *head = NULL, **p_next = &head;
