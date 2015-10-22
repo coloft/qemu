@@ -1448,6 +1448,18 @@ static inline void *host_from_stream_offset(QEMUFile *f,
         }
 
         if (ram_cache_enable) {
+            unsigned long *bitmap;
+            long k = (block->mr->ram_addr + offset) >> TARGET_PAGE_BITS;
+
+            bitmap = atomic_rcu_read(&migration_bitmap_rcu)->bmap;
+            /*
+            * During colo checkpoint, we need bitmap of these migrated pages.
+            * It help us to decide which pages in ram cache should be flushed
+            * into VM's RAM later.
+            */
+            if (!test_and_set_bit(k, bitmap)) {
+                migration_dirty_pages++;
+            }
             return block->host_cache + offset;
         } else {
             return block->host + offset;
@@ -1462,6 +1474,13 @@ static inline void *host_from_stream_offset(QEMUFile *f,
         if (!strncmp(id, block->idstr, sizeof(id)) &&
             block->max_length > offset) {
             if (ram_cache_enable) {
+                unsigned long *bitmap;
+                long k = (block->mr->ram_addr + offset) >> TARGET_PAGE_BITS;
+
+                bitmap = atomic_rcu_read(&migration_bitmap_rcu)->bmap;
+                if (!test_and_set_bit(k, bitmap)) {
+                    migration_dirty_pages++;
+                }
                 return block->host_cache + offset;
             } else {
                 return block->host + offset;
@@ -1723,6 +1742,7 @@ static int ram_load(QEMUFile *f, void *opaque, int version_id)
 int colo_init_ram_cache(void)
 {
     RAMBlock *block;
+    int64_t ram_cache_pages = last_ram_offset() >> TARGET_PAGE_BITS;
 
     rcu_read_lock();
     QLIST_FOREACH_RCU(block, &ram_list.blocks, next) {
@@ -1734,6 +1754,15 @@ int colo_init_ram_cache(void)
     }
     rcu_read_unlock();
     ram_cache_enable = true;
+    /*
+    * Record the dirty pages that sent by PVM, we use this dirty bitmap together
+    * with to decide which page in cache should be flushed into SVM's RAM. Here
+    * we use the same name 'migration_bitmap_rcu' as for migration.
+    */
+    migration_bitmap_rcu = g_new(struct BitmapRcu, 1);
+    migration_bitmap_rcu->bmap = bitmap_new(ram_cache_pages);
+    migration_dirty_pages = 0;
+
     return 0;
 
 out_locked:
@@ -1751,8 +1780,14 @@ out_locked:
 void colo_release_ram_cache(void)
 {
     RAMBlock *block;
+    struct BitmapRcu *bitmap = migration_bitmap_rcu;
 
     ram_cache_enable = false;
+
+    atomic_rcu_set(&migration_bitmap_rcu, NULL);
+    if (bitmap) {
+        call_rcu(bitmap, migration_bitmap_free, rcu);
+    }
 
     rcu_read_lock();
     QLIST_FOREACH_RCU(block, &ram_list.blocks, next) {
