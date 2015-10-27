@@ -342,6 +342,7 @@ extern const BdrvChildRole child_format;
 
 struct BdrvChild {
     BlockDriverState *bs;
+    BlockDriverState *parent;
     const BdrvChildRole *role;
     QLIST_ENTRY(BdrvChild) next;
     QLIST_ENTRY(BdrvChild) next_parent;
