@@ -74,5 +74,6 @@ ssize_t qemu_netfilter_pass_to_next(NetClientState *sender,
                                     int iovcnt,
                                     void *opaque);
 void filter_buffer_release_all(void);
+void  filter_buffer_del_all_timers(void);
 
 #endif /* QEMU_NET_FILTER_H */

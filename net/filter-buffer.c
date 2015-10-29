@@ -178,6 +178,23 @@ void filter_buffer_release_all(void)
     qemu_foreach_netfilter(filter_buffer_release_packets, NULL, NULL);
 }
 
+static void filter_buffer_del_timer(NetFilterState *nf, void *opaque,
+                                    Error **errp)
+{
+    if (!strcmp(object_get_typename(OBJECT(nf)), TYPE_FILTER_BUFFER)) {
+        FilterBufferState *s = FILTER_BUFFER(nf);
+
+        if (s->interval) {
+            timer_del(&s->release_timer);
+        }
+    }
+}
+
+void filter_buffer_del_all_timers(void)
+{
+    qemu_foreach_netfilter(filter_buffer_del_timer, NULL, NULL);
+}
+
 static void filter_buffer_init(Object *obj)
 {
     object_property_add(obj, "interval", "int",
