@@ -14,6 +14,7 @@
 #include "qapi/qmp/qerror.h"
 #include "qapi-visit.h"
 #include "qom/object.h"
+#include "net/net.h"
 
 #define TYPE_FILTER_BUFFER "filter-buffer"
 
@@ -161,6 +162,20 @@ static void filter_buffer_set_interval(Object *obj, Visitor *v, void *opaque,
 
 out:
     error_propagate(errp, local_err);
+}
+
+static void filter_buffer_release_packets(NetFilterState *nf, void *opaque,
+                                          Error **errp)
+{
+    if (!strcmp(object_get_typename(OBJECT(nf)), TYPE_FILTER_BUFFER)) {
+        filter_buffer_flush(nf);
+    }
+}
+
+/* public APIs */
+void filter_buffer_release_all(void)
+{
+    qemu_foreach_netfilter(filter_buffer_release_packets, NULL, NULL);
 }
 
 static void filter_buffer_init(Object *obj)

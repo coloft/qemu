@@ -259,6 +259,30 @@ static char *assign_name(NetClientState *nc1, const char *model)
     return g_strdup_printf("%s.%d", model, id);
 }
 
+void qemu_foreach_netfilter(qemu_netfilter_foreach func, void *opaque,
+                            Error **errp)
+{
+    NetClientState *nc;
+    NetFilterState *nf;
+
+    QTAILQ_FOREACH(nc, &net_clients, next) {
+        if (nc->info->type == NET_CLIENT_OPTIONS_KIND_NIC) {
+            continue;
+        }
+        QTAILQ_FOREACH(nf, &nc->filters, next) {
+            if (func) {
+                Error *local_err = NULL;
+
+                func(nf, opaque, &local_err);
+                if (local_err) {
+                    error_propagate(errp, local_err);
+                    return;
+                }
+            }
+        }
+    }
+}
+
 static void qemu_net_client_destructor(NetClientState *nc)
 {
     g_free(nc);

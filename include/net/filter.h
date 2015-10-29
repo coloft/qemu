@@ -73,5 +73,6 @@ ssize_t qemu_netfilter_pass_to_next(NetClientState *sender,
                                     const struct iovec *iov,
                                     int iovcnt,
                                     void *opaque);
+void filter_buffer_release_all(void);
 
 #endif /* QEMU_NET_FILTER_H */
