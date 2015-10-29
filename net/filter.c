@@ -117,6 +117,18 @@ static void netfilter_set_direction(Object *obj, int direction, Error **errp)
     nf->direction = direction;
 }
 
+static bool netfilter_get_auto_flag(Object *obj, Error **errp)
+{
+    NetFilterState *nf = NETFILTER(obj);
+    return nf->auto_add;
+}
+
+static void netfilter_set_auto_flag(Object *obj, bool flag, Error **errp)
+{
+    NetFilterState *nf = NETFILTER(obj);
+    nf->auto_add = flag;
+}
+
 static void netfilter_init(Object *obj)
 {
     object_property_add_str(obj, "netdev",
@@ -125,6 +137,9 @@ static void netfilter_init(Object *obj)
     object_property_add_enum(obj, "queue", "NetFilterDirection",
                              NetFilterDirection_lookup,
                              netfilter_get_direction, netfilter_set_direction,
+                             NULL);
+    object_property_add_bool(obj, "auto",
+                             netfilter_get_auto_flag, netfilter_set_auto_flag,
                              NULL);
 }
 

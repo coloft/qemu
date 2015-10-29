@@ -19,6 +19,7 @@
 #include "qapi/qmp-output-visitor.h"
 #include "qapi/qmp-input-visitor.h"
 #include "monitor/monitor.h"
+#include "qmp-commands.h"
 
 
 #define TYPE_FILTER_BUFFER "filter-buffer"
@@ -267,6 +268,22 @@ void qemu_auto_add_filter_buffer(NetFilterDirection direction, Error **errp)
     qemu_foreach_netdev(netdev_add_filter_buffer, queue,
                                         errp);
     g_free(queue);
+}
+
+static void netdev_del_filter_buffer(NetFilterState *nf, void *opaque,
+                                     Error **errp)
+{
+    if (!strcmp(object_get_typename(OBJECT(nf)), TYPE_FILTER_BUFFER) &&
+        nf->auto_add) {
+        char *id = object_get_canonical_path_component(OBJECT(nf));
+
+        qmp_object_del(id, errp);
+    }
+}
+
+void qemu_auto_del_filter_buffer(Error **errp)
+{
+    qemu_foreach_netfilter(netdev_del_filter_buffer, NULL, errp);
 }
 
 static void filter_buffer_init(Object *obj)

@@ -55,6 +55,7 @@ struct NetFilterState {
     char *netdev_id;
     NetClientState *netdev;
     NetFilterDirection direction;
+    bool auto_add;
     char info_str[256];
     QTAILQ_ENTRY(NetFilterState) next;
 };
@@ -76,5 +77,6 @@ ssize_t qemu_netfilter_pass_to_next(NetClientState *sender,
 void filter_buffer_release_all(void);
 void  filter_buffer_del_all_timers(void);
 void qemu_auto_add_filter_buffer(NetFilterDirection direction, Error **errp);
+void qemu_auto_del_filter_buffer(Error **errp);
 
 #endif /* QEMU_NET_FILTER_H */
