@@ -75,5 +75,6 @@ ssize_t qemu_netfilter_pass_to_next(NetClientState *sender,
                                     void *opaque);
 void filter_buffer_release_all(void);
 void  filter_buffer_del_all_timers(void);
+void qemu_auto_add_filter_buffer(NetFilterDirection direction, Error **errp);
 
 #endif /* QEMU_NET_FILTER_H */

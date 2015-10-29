@@ -15,6 +15,11 @@
 #include "qapi-visit.h"
 #include "qom/object.h"
 #include "net/net.h"
+#include "qapi/qmp/qdict.h"
+#include "qapi/qmp-output-visitor.h"
+#include "qapi/qmp-input-visitor.h"
+#include "monitor/monitor.h"
+
 
 #define TYPE_FILTER_BUFFER "filter-buffer"
 
@@ -183,6 +188,85 @@ static void filter_buffer_del_timer(NetFilterState *nf, void *opaque,
 void filter_buffer_del_all_timers(void)
 {
     qemu_foreach_netfilter(filter_buffer_del_timer, NULL, NULL);
+}
+
+static void netdev_add_filter_buffer(NetClientState *nc, void *opaque,
+                                     Error **errp)
+{
+    NetFilterState *nf;
+    bool found = false;
+
+    QTAILQ_FOREACH(nf, &nc->filters, next) {
+        if (!strcmp(object_get_typename(OBJECT(nf)), TYPE_FILTER_BUFFER)) {
+            found = true;
+            break;
+        }
+    }
+
+    if (!found) {
+        QmpOutputVisitor *qov;
+        QmpInputVisitor *qiv;
+        Visitor *ov, *iv;
+        QObject *obj = NULL;
+        QDict *qdict;
+        void *dummy = NULL;
+        char *id = g_strdup_printf("%s-%s.0", nc->name, TYPE_FILTER_BUFFER);
+        char *queue = (char *) opaque;
+        bool auto_add = true;
+        Error *err = NULL;
+
+        qov = qmp_output_visitor_new();
+        ov = qmp_output_get_visitor(qov);
+        visit_start_struct(ov,  &dummy, NULL, NULL, 0, &err);
+        if (err) {
+            goto out;
+        }
+        visit_type_str(ov, &nc->name, "netdev", &err);
+        if (err) {
+            goto out;
+        }
+        visit_type_str(ov, &queue, "queue", &err);
+        if (err) {
+            goto out;
+        }
+        visit_type_bool(ov, &auto_add, "auto", &err);
+        if (err) {
+            goto out;
+        }
+        visit_end_struct(ov, &err);
+        if (err) {
+            goto out;
+        }
+        obj = qmp_output_get_qobject(qov);
+        g_assert(obj != NULL);
+        qdict = qobject_to_qdict(obj);
+        qmp_output_visitor_cleanup(qov);
+
+        qiv = qmp_input_visitor_new(obj);
+        iv = qmp_input_get_visitor(qiv);
+        object_add(TYPE_FILTER_BUFFER, id, qdict, iv, &err);
+        qmp_input_visitor_cleanup(qiv);
+        qobject_decref(obj);
+out:
+        g_free(id);
+        if (err) {
+            error_propagate(errp, err);
+        }
+    }
+}
+/*
+* This will be used by COLO or MC FT, for which they will need
+* to buffer all the packets of all VM's net devices, Here we check
+* and automatically add netfilter for netdev that doesn't attach any buffer
+* netfilter.
+*/
+void qemu_auto_add_filter_buffer(NetFilterDirection direction, Error **errp)
+{
+    char *queue = g_strdup(NetFilterDirection_lookup[direction]);
+
+    qemu_foreach_netdev(netdev_add_filter_buffer, queue,
+                                        errp);
+    g_free(queue);
 }
 
 static void filter_buffer_init(Object *obj)

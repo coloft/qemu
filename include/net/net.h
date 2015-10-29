@@ -129,6 +129,9 @@ typedef void (*qemu_netfilter_foreach)(NetFilterState *nf, void *opaque,
                                        Error **errp);
 void qemu_foreach_netfilter(qemu_netfilter_foreach func, void *opaque,
                             Error **errp);
+typedef void (*qemu_netdev_foreach)(NetClientState *nc, void *opaque,
+                                    Error **errp);
+void qemu_foreach_netdev(qemu_netdev_foreach func, void *opaque, Error **errp);
 int qemu_can_send_packet(NetClientState *nc);
 ssize_t qemu_sendv_packet(NetClientState *nc, const struct iovec *iov,
                           int iovcnt);
