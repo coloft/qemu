@@ -21,6 +21,8 @@
 #include "qapi-event.h"
 #include "qmp-commands.h"
 #include "qapi-types.h"
+#include "net/filter.h"
+#include "net/net.h"
 
 /*
  * The delay time before qemu begin the procedure of default failover treatment.
@@ -57,6 +59,24 @@ bool migration_incoming_in_colo_state(void)
 static bool colo_runstate_is_stopped(void)
 {
     return runstate_check(RUN_STATE_COLO) || !runstate_is_running();
+}
+
+static int colo_init_filter_buffers(void)
+{
+    Error *local_err = NULL;
+
+    qemu_auto_add_filter_buffer(NET_FILTER_DIRECTION_RX, &local_err);
+    if (local_err) {
+        error_report_err(local_err);
+        return -1;
+    }
+    filter_buffer_del_all_timers();
+    return 0;
+}
+
+static void colo_cleanup_filter_buffers(void)
+{
+    qemu_auto_del_filter_buffer(NULL);
 }
 
 static void secondary_vm_do_failover(void)
@@ -123,6 +143,7 @@ static void primary_vm_do_failover(void)
     if (s->to_dst_file) {
         qemu_file_shutdown(s->to_dst_file);
     }
+    colo_cleanup_filter_buffers();
 
     vm_start();
 
@@ -291,6 +312,8 @@ static int colo_do_checkpoint_transaction(MigrationState *s,
         goto out;
     }
 
+    filter_buffer_release_all();
+
     if (colo_shutdown) {
         colo_ctl_put(s->to_dst_file, COLO_COMMAND_GUEST_SHUTDOWN, 0);
         qemu_fflush(s->to_dst_file);
@@ -338,6 +361,12 @@ static void colo_process_checkpoint(MigrationState *s)
     int fd, ret = 0;
 
     failover_init_state();
+
+    ret = colo_init_filter_buffers();
+    if (ret < 0) {
+        ret = -EINVAL;
+        goto out;
+    }
 
     /* Dup the fd of to_dst_file */
     fd = dup(qemu_get_fd(s->to_dst_file));
