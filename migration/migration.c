@@ -328,16 +328,6 @@ static void process_incoming_migration_co(void *opaque)
         exit(EXIT_FAILURE);
     }
 
-    /* Make sure all file formats flush their mutable metadata */
-    bdrv_invalidate_cache_all(&local_err);
-    if (local_err) {
-        migrate_set_state(&mis->state, MIGRATION_STATUS_ACTIVE,
-                          MIGRATION_STATUS_FAILED);
-        error_report_err(local_err);
-        migrate_decompress_threads_join();
-        exit(EXIT_FAILURE);
-    }
-
     /*
      * This must happen after all error conditions are dealt with and
      * we're sure the VM is going to be running on this host.
