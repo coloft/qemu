@@ -226,6 +226,22 @@ If the tray is open and there is no medium inserted, this will be a no-o
 ETEXI
 
     {
+        .name       = "blockdev_insert_medium",
+        .args_type  = "device:s,node_name:s",
+        .params     = "device node_name",
+        .help       = "Inserts a medium (a block driver state tree) into a block device",
+        .mhandler.cmd = hmp_blockdev_insert_medium,
+    },
+
+STEXI
+@item blockdev_insert_medium @var{device} @var{node_name}
+@findex blockdev_insert_medium
+Inserts a medium (a block driver state tree) into a block device. That block
+device's tray must currently be open (unless there is no attached guest device)
+and there must be no medium inserted already.
+ETEXI
+
+    {
         .name       = "change",
         .args_type  = "device:B,target:F,arg:s?,read-only-mode:s?",
         .params     = "device filename [format [read-only-mode]]",

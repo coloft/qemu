@@ -2420,3 +2420,17 @@ void hmp_blockdev_remove_medium(Monitor *mon, const QDict *qdict)
         return;
     }
 }
+
+void hmp_blockdev_insert_medium(Monitor *mon, const QDict *qdict)
+{
+    const char *device = qdict_get_str(qdict, "device");
+    const char *node_name = qdict_get_str(qdict, "node_name");
+    Error *err = NULL;
+
+     qmp_blockdev_insert_medium(device, node_name, &err);
+    if (err) {
+        monitor_printf(mon, "%s\n", error_get_pretty(err));
+        error_free(err);
+        return;
+    }
+}
