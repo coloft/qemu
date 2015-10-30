@@ -210,6 +210,22 @@ This is useful to fix a broken quorum child.
 ETEXI
 
     {
+        .name       = "blockdev_remove_medium",
+        .args_type  = "device:s",
+        .params     = "device",
+        .help       = "Removes a medium (a block driver state tree) from a block device",
+        .mhandler.cmd = hmp_blockdev_remove_medium,
+    },
+
+STEXI
+@item blockdev_remove_medium @var{device}
+@findex blockdev_remove_medium
+Removes a medium (a block driver state tree) from a block device. That block
+device's tray must currently be open (unless there is no attached guest device).
+If the tray is open and there is no medium inserted, this will be a no-o
+ETEXI
+
+    {
         .name       = "change",
         .args_type  = "device:B,target:F,arg:s?,read-only-mode:s?",
         .params     = "device filename [format [read-only-mode]]",

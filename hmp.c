@@ -2407,3 +2407,16 @@ void hmp_blockdev_change(Monitor *mon, const QDict *qdict)
 out:
     hmp_handle_error(mon, &local_err);
 }
+
+void hmp_blockdev_remove_medium(Monitor *mon, const QDict *qdict)
+{
+    const char *device = qdict_get_str(qdict, "device");
+    Error *err = NULL;
+
+     qmp_blockdev_remove_medium(device, &err);
+    if (err) {
+        monitor_printf(mon, "%s\n", error_get_pretty(err));
+        error_free(err);
+        return;
+    }
+}
