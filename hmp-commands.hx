@@ -194,7 +194,7 @@ ETEXI
 
     {
         .name       = "blockdev_change",
-        .args_type  = "op:s,parent:B,child:B?,node:?",
+        .args_type  = "op:s,parent:B,child:B?,node:B?",
         .params     = "operation parent [child] [node]",
         .help       = "Dynamic reconfigure the block driver state graph",
         .mhandler.cmd = hmp_blockdev_change,
