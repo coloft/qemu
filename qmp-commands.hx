@@ -3986,6 +3986,171 @@ Delete a quorum's node
 EQMP
 
     {
+        .name       = "blockdev-open-tray",
+        .args_type  = "device:s,force:b?",
+        .mhandler.cmd_new = qmp_marshal_blockdev_open_tray,
+    },
+
+SQMP
+blockdev-open-tray
+------------------
+
+Opens a block device's tray. If there is a block driver state tree inserted as a
+medium, it will become inaccessible to the guest (but it will remain associated
+to the block device, so closing the tray will make it accessible again).
+
+If the tray was already open before, this will be a no-op.
+
+Once the tray opens, a DEVICE_TRAY_MOVED event is emitted. There are cases in
+which no such event will be generated, these include:
+- if the guest has locked the tray, @force is false and the guest does not
+  respond to the eject request
+- if the BlockBackend denoted by @device does not have a guest device attached
+  to it
+- if the guest device does not have an actual tray and is empty, for instance
+  for floppy disk drives
+
+Arguments:
+
+- "device": block device name (json-string)
+- "force": if false (the default), an eject request will be sent to the guest if
+           it has locked the tray (and the tray will not be opened immediately);
+           if true, the tray will be opened regardless of whether it is locked
+           (json-bool, optional)
+
+Example:
+
+-> { "execute": "blockdev-open-tray",
+     "arguments": { "device": "ide1-cd0" } }
+
+<- { "timestamp": { "seconds": 1418751016,
+                    "microseconds": 716996 },
+     "event": "DEVICE_TRAY_MOVED",
+     "data": { "device": "ide1-cd0",
+               "tray-open": true } }
+
+<- { "return": {} }
+
+EQMP
+
+    {
+        .name       = "blockdev-close-tray",
+        .args_type  = "device:s",
+        .mhandler.cmd_new = qmp_marshal_blockdev_close_tray,
+    },
+
+SQMP
+blockdev-close-tray
+-------------------
+
+Closes a block device's tray. If there is a block driver state tree associated
+with the block device (which is currently ejected), that tree will be loaded as
+the medium.
+
+If the tray was already closed before, this will be a no-op.
+
+Arguments:
+
+- "device": block device name (json-string)
+
+Example:
+
+-> { "execute": "blockdev-close-tray",
+     "arguments": { "device": "ide1-cd0" } }
+
+<- { "timestamp": { "seconds": 1418751345,
+                    "microseconds": 272147 },
+     "event": "DEVICE_TRAY_MOVED",
+     "data": { "device": "ide1-cd0",
+               "tray-open": false } }
+
+<- { "return": {} }
+
+EQMP
+
+    {
+        .name       = "blockdev-remove-medium",
+        .args_type  = "device:s",
+        .mhandler.cmd_new = qmp_marshal_blockdev_remove_medium,
+    },
+
+SQMP
+blockdev-remove-medium
+----------------------
+
+Removes a medium (a block driver state tree) from a block device. That block
+device's tray must currently be open (unless there is no attached guest device).
+
+If the tray is open and there is no medium inserted, this will be a no-op.
+
+Arguments:
+
+- "device": block device name (json-string)
+
+Example:
+
+-> { "execute": "blockdev-remove-medium",
+     "arguments": { "device": "ide1-cd0" } }
+
+<- { "error": { "class": "GenericError",
+                "desc": "Tray of device 'ide1-cd0' is not open" } }
+
+-> { "execute": "blockdev-open-tray",
+     "arguments": { "device": "ide1-cd0" } }
+
+<- { "timestamp": { "seconds": 1418751627,
+                    "microseconds": 549958 },
+     "event": "DEVICE_TRAY_MOVED",
+     "data": { "device": "ide1-cd0",
+               "tray-open": true } }
+
+<- { "return": {} }
+
+-> { "execute": "blockdev-remove-medium",
+     "arguments": { "device": "ide1-cd0" } }
+
+<- { "return": {} }
+
+EQMP
+
+    {
+        .name       = "blockdev-insert-medium",
+        .args_type  = "device:s,node-name:s",
+        .mhandler.cmd_new = qmp_marshal_blockdev_insert_medium,
+    },
+
+SQMP
+blockdev-insert-medium
+----------------------
+
+Inserts a medium (a block driver state tree) into a block device. That block
+device's tray must currently be open (unless there is no attached guest device)
+and there must be no medium inserted already.
+
+Arguments:
+
+- "device": block device name (json-string)
+- "node-name": root node of the BDS tree to insert into the block device
+
+Example:
+
+-> { "execute": "blockdev-add",
+     "arguments": { "options": { "node-name": "node0",
+                                 "driver": "raw",
+                                 "file": { "driver": "file",
+                                           "filename": "fedora.iso" } } } }
+
+<- { "return": {} }
+
+-> { "execute": "blockdev-insert-medium",
+     "arguments": { "device": "ide1-cd0",
+                    "node-name": "node0" } }
+
+<- { "return": {} }
+
+EQMP
+
+    {
         .name       = "query-named-block-nodes",
         .args_type  = "",
         .mhandler.cmd_new = qmp_marshal_query_named_block_nodes,
@@ -4044,6 +4209,59 @@ Example:
                           "virtual-size":2048000
                       }
                    } } ] }
+
+EQMP
+
+    {
+        .name       = "blockdev-change-medium",
+        .args_type  = "device:B,filename:F,format:s?,read-only-mode:s?",
+        .mhandler.cmd_new = qmp_marshal_blockdev_change_medium,
+    },
+
+SQMP
+blockdev-change-medium
+----------------------
+
+Changes the medium inserted into a block device by ejecting the current medium
+and loading a new image file which is inserted as the new medium.
+
+Arguments:
+
+- "device": device name (json-string)
+- "filename": filename of the new image (json-string)
+- "format": format of the new image (json-string, optional)
+- "read-only-mode": new read-only mode (json-string, optional)
+          - Possible values: "retain" (default), "read-only", "read-write"
+
+Examples:
+
+1. Change a removable medium
+
+-> { "execute": "blockdev-change-medium",
+             "arguments": { "device": "ide1-cd0",
+                            "filename": "/srv/images/Fedora-12-x86_64-DVD.iso",
+                            "format": "raw" } }
+<- { "return": {} }
+
+2. Load a read-only medium into a writable drive
+
+-> { "execute": "blockdev-change-medium",
+             "arguments": { "device": "isa-fd0",
+                            "filename": "/srv/images/ro.img",
+                            "format": "raw",
+                            "read-only-mode": "retain" } }
+
+<- { "error":
+     { "class": "GenericError",
+       "desc": "Could not open '/srv/images/ro.img': Permission denied" } }
+
+-> { "execute": "blockdev-change-medium",
+             "arguments": { "device": "isa-fd0",
+                            "filename": "/srv/images/ro.img",
+                            "format": "raw",
+                            "read-only-mode": "read-only" } }
+
+<- { "return": {} }
 
 EQMP
 
