@@ -177,6 +177,7 @@ static void netfilter_init(Object *obj)
     * for netfilter will be enabled.
     */
     nf->enabled = true;
+    nf->is_default = false;
 
     object_property_add_str(obj, "netdev",
                             netfilter_get_netdev_id, netfilter_set_netdev_id,
@@ -230,6 +231,39 @@ static void netfilter_complete(UserCreatable *uc, Error **errp)
         }
     }
     QTAILQ_INSERT_TAIL(&nf->netdev->filters, nf, next);
+}
+
+NetFilterState *netdev_add_filter(const char *netdev_id,
+                                  const char *filter_type,
+                                  const char *filter_id,
+                                  bool enabled,
+                                  Error **errp)
+{
+    NetClientState *nc = qemu_find_netdev(netdev_id);
+    Object *filter;
+    Error *local_err = NULL;
+
+    /* FIXME: Not support multiple queues */
+    if (!nc || nc->queue_index > 1) {
+        return NULL;
+    }
+    /* Not support vhost-net */
+    if (get_vhost_net(nc)) {
+        return NULL;
+    }
+
+    filter = object_new_with_props(filter_type,
+                        object_get_objects_root(),
+                        filter_id,
+                        &local_err,
+                        "netdev", netdev_id,
+                        "status", enabled ? "enable" : "disable",
+                        NULL);
+    if (local_err) {
+        error_propagate(errp, local_err);
+        return NULL;
+    }
+    return NETFILTER(filter);
 }
 
 static void netfilter_finalize(Object *obj)
