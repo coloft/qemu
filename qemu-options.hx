@@ -3742,11 +3742,13 @@ version by providing the @var{passwordid} parameter. This provides
 the ID of a previously created @code{secret} object containing the
 password for decryption.
 
-@item -object filter-buffer,id=@var{id},netdev=@var{netdevid},interval=@var{t}[,queue=@var{all|rx|tx}]
+@item -object filter-buffer,id=@var{id},netdev=@var{netdevid},interval=@var{t}[,queue=@var{all|rx|tx}][,status=@var{enable|disable}]
 
 Interval @var{t} can't be 0, this filter batches the packet delivery: all
 packets arriving in a given interval on netdev @var{netdevid} are delayed
 until the end of the interval. Interval is in microseconds.
+@option{status} is optional that indicate whether the netfilter is enabled
+or disabled, the default status for netfilter will be enabled.
 
 queue @var{all|rx|tx} is an option that can be applied to any netfilter.
 

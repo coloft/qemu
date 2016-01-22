@@ -17,6 +17,11 @@
 #include "qom/object_interfaces.h"
 #include "qemu/iov.h"
 
+static inline bool qemu_can_skip_netfilter(NetFilterState *nf)
+{
+    return nf->enabled ? false : true;
+}
+
 ssize_t qemu_netfilter_receive(NetFilterState *nf,
                                NetFilterDirection direction,
                                NetClientState *sender,
@@ -25,6 +30,9 @@ ssize_t qemu_netfilter_receive(NetFilterState *nf,
                                int iovcnt,
                                NetPacketSent *sent_cb)
 {
+    if (qemu_can_skip_netfilter(nf)) {
+        return 0;
+    }
     if (nf->direction == direction ||
         nf->direction == NET_FILTER_DIRECTION_ALL) {
         return NETFILTER_GET_CLASS(OBJECT(nf))->receive_iov(
@@ -134,8 +142,37 @@ static void netfilter_set_direction(Object *obj, int direction, Error **errp)
     nf->direction = direction;
 }
 
+static char *netfilter_get_status(Object *obj, Error **errp)
+{
+    NetFilterState *nf = NETFILTER(obj);
+
+    if (nf->enabled) {
+        return g_strdup("enable");
+    } else {
+        return g_strdup("disable");
+    }
+}
+
+static void netfilter_set_status(Object *obj, const char *str, Error **errp)
+{
+    NetFilterState *nf = NETFILTER(obj);
+
+    if (!strcmp(str, "enable")) {
+        nf->enabled = true;
+    } else if (!strcmp(str, "disable")) {
+        nf->enabled = false;
+    } else {
+        error_setg(errp, "Invalid value for netfilter status, "
+                         "should be 'enable' or 'disable'");
+    }
+}
+
 static void netfilter_init(Object *obj)
 {
+    NetFilterState *nf = NETFILTER(obj);
+
+    nf->enabled = true;
+
     object_property_add_str(obj, "netdev",
                             netfilter_get_netdev_id, netfilter_set_netdev_id,
                             NULL);
@@ -143,6 +180,9 @@ static void netfilter_init(Object *obj)
                              NetFilterDirection_lookup,
                              netfilter_get_direction, netfilter_set_direction,
                              NULL);
+    object_property_add_str(obj, "status",
+                            netfilter_get_status, netfilter_set_status,
+                            NULL);
 }
 
 static void netfilter_complete(UserCreatable *uc, Error **errp)

@@ -55,6 +55,7 @@ struct NetFilterState {
     char *netdev_id;
     NetClientState *netdev;
     NetFilterDirection direction;
+    bool enabled;
     QTAILQ_ENTRY(NetFilterState) next;
 };
 
