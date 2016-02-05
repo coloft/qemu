@@ -459,6 +459,11 @@ static QuorumVoteVersion *quorum_get_vote_winner(QuorumVotes *votes)
         if (candidate->vote_count > max) {
             max = candidate->vote_count;
             winner = candidate;
+            continue;
+        }
+        if (candidate->vote_count == max &&
+                candidate->value.l > winner->value.l) {
+            winner = candidate;
         }
     }
 
