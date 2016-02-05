@@ -176,6 +176,10 @@ struct NICInfo {
     int nvectors;
 };
 
+typedef struct netdev_init_entry NetdevInitEntry;
+typedef void NetdevInitHandler(const char *netdev_id, void *opaque);
+NetdevInitEntry *netdev_init_add_handler(NetdevInitHandler *cb, void *opaque);
+
 extern int nb_nics;
 extern NICInfo nd_table[MAX_NICS];
 extern int default_net;
