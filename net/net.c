@@ -55,6 +55,14 @@
 static VMChangeStateEntry *net_change_state_entry;
 static QTAILQ_HEAD(, NetClientState) net_clients;
 
+struct netdev_init_entry {
+    NetdevInitHandler *cb;
+    void *opaque;
+    QLIST_ENTRY(netdev_init_entry) entries;
+};
+
+static QLIST_HEAD(netdev_init_head, netdev_init_entry)netdev_init_head;
+
 const char *host_net_devices[] = {
     "tap",
     "socket",
@@ -953,6 +961,26 @@ static int net_init_nic(const NetClientOptions *opts, const char *name,
     return idx;
 }
 
+NetdevInitEntry *netdev_init_add_handler(NetdevInitHandler *cb, void *opaque)
+{
+    NetdevInitEntry *e;
+
+    e = g_malloc0(sizeof(*e));
+
+    e->cb = cb;
+    e->opaque = opaque;
+    QLIST_INSERT_HEAD(&netdev_init_head, e, entries);
+    return e;
+}
+
+static void netdev_init_notify(const char *netdev_id)
+{
+    NetdevInitEntry *e, *next;
+
+    QLIST_FOREACH_SAFE(e, &netdev_init_head, entries, next) {
+        e->cb(netdev_id, e->opaque);
+    }
+}
 
 static int (* const net_client_init_fun[NET_CLIENT_OPTIONS_KIND__MAX])(
     const NetClientOptions *opts,
@@ -1038,6 +1066,11 @@ static int net_client_init1(const void *object, int is_netdev, Error **errp)
                        NetClientOptionsKind_lookup[opts->type]);
         }
         return -1;
+    }
+    if (is_netdev) {
+        const Netdev *netdev = object;
+
+        netdev_init_notify(netdev->id);
     }
     return 0;
 }
