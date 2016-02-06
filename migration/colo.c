@@ -104,10 +104,26 @@ static void secondary_vm_do_failover(void)
     }
 }
 
+static void colo_set_filter_status(NetFilterState *nf, void *opaque,
+                                   Error **errp)
+{
+    char colo_filter[128];
+    char *name = object_get_canonical_path_component(OBJECT(nf));
+    char *status = opaque;
+
+    snprintf(colo_filter, sizeof(colo_filter), "%scolo", nf->netdev_id);
+    if (strcmp(colo_filter, name)) {
+        return;
+    }
+    object_property_set_str(OBJECT(nf), status, "status", errp);
+}
+
 static void primary_vm_do_failover(void)
 {
     MigrationState *s = migrate_get_current();
     int old_state;
+    char *status;
+    Error *local_err = NULL;
 
     migrate_set_state(&s->state, MIGRATION_STATUS_COLO,
                       MIGRATION_STATUS_COMPLETED);
@@ -131,6 +147,14 @@ static void primary_vm_do_failover(void)
                      old_state);
         return;
     }
+
+    status = g_strdup("disable");
+    qemu_foreach_netfilter(colo_set_filter_status, status, &local_err);
+    g_free(status);
+    if (local_err) {
+        error_report_err(local_err);
+    }
+
     /* Notify COLO thread that failover work is finished */
     qemu_sem_post(&s->colo_sem);
 }
@@ -404,10 +428,18 @@ static void colo_process_checkpoint(MigrationState *s)
 {
     QEMUSizedBuffer *buffer = NULL;
     int64_t current_time, checkpoint_time = qemu_clock_get_ms(QEMU_CLOCK_HOST);
+    char *status;
     Error *local_err = NULL;
     int ret;
 
     failover_init_state();
+
+    status = g_strdup("enable");
+    qemu_foreach_netfilter(colo_set_filter_status, status, &local_err);
+    g_free(status);
+    if (local_err) {
+        goto out;
+    }
 
     s->rp_state.from_dst_file = qemu_file_get_return_path(s->to_dst_file);
     if (!s->rp_state.from_dst_file) {
