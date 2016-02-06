@@ -83,4 +83,6 @@ NetFilterState *netdev_add_filter(const char *netdev_id,
                                   bool enabled,
                                   Error **errp);
 
+void filter_buffer_flush(NetFilterState *nf);
+
 #endif /* QEMU_NET_FILTER_H */

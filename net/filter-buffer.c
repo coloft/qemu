@@ -27,7 +27,7 @@ typedef struct FilterBufferState {
     QEMUTimer release_timer;
 } FilterBufferState;
 
-static void filter_buffer_flush(NetFilterState *nf)
+void filter_buffer_flush(NetFilterState *nf)
 {
     FilterBufferState *s = FILTER_BUFFER(nf);
 
