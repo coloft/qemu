@@ -113,10 +113,22 @@ static void secondary_vm_do_failover(void)
     }
 }
 
+static void colo_set_filter_status(const char *status, Error **errp)
+{
+    struct COLOListNode *e, *next;
+    NetFilterState *nf;
+
+    QLIST_FOREACH_SAFE(e, &COLOBufferFilters, node, next) {
+        nf = e->opaque;
+        object_property_set_str(OBJECT(nf), status, "status", errp);
+    }
+}
+
 static void primary_vm_do_failover(void)
 {
     MigrationState *s = migrate_get_current();
     int old_state;
+    Error *local_err = NULL;
 
     migrate_set_state(&s->state, MIGRATION_STATUS_COLO,
                       MIGRATION_STATUS_COMPLETED);
@@ -140,6 +152,12 @@ static void primary_vm_do_failover(void)
                      old_state);
         return;
     }
+
+    colo_set_filter_status("disable", &local_err);
+    if (local_err) {
+        error_report_err(local_err);
+    }
+
     /* Notify COLO thread that failover work is finished */
     qemu_sem_post(&s->colo_sem);
 }
@@ -439,6 +457,11 @@ static void colo_process_checkpoint(MigrationState *s)
     int ret;
 
     failover_init_state();
+
+    colo_set_filter_status("enable", &local_err);
+    if (local_err) {
+        goto out;
+    }
 
     s->rp_state.from_dst_file = qemu_file_get_return_path(s->to_dst_file);
     if (!s->rp_state.from_dst_file) {
