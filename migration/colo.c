@@ -18,11 +18,22 @@
 #include "qemu/error-report.h"
 #include "migration/failover.h"
 #include "qapi-event.h"
+#include "net/net.h"
+#include "net/filter.h"
+#include "net/vhost_net.h"
 
 static bool vmstate_loading;
 
 /* colo buffer */
 #define COLO_BUFFER_BASE_SIZE (4 * 1024 * 1024)
+
+typedef struct COLOListNode {
+    void *opaque;
+    QLIST_ENTRY(COLOListNode) node;
+} COLOListNode;
+
+static QLIST_HEAD(, COLOListNode) COLOBufferFilters =
+    QLIST_HEAD_INITIALIZER(COLOBufferFilters);
 
 bool colo_supported(void)
 {
@@ -380,6 +391,44 @@ static int colo_prepare_before_save(MigrationState *s)
         error_report("Save vm state begin error");
     }
     return ret;
+}
+
+void colo_add_buffer_filter(const char *netdev_id, void *opaque)
+{
+    NetFilterState *nf;
+    char filter_name[128];
+    Object *filter;
+    COLOListNode *filternode;
+    NetClientState *nc = qemu_find_netdev(netdev_id);
+
+    /* FIXME: Not support multiple queues */
+    if (!nc || nc->queue_index > 1) {
+        return;
+    }
+
+     /* Not support vhost-net */
+    if (get_vhost_net(nc)) {
+        return;
+    }
+
+    snprintf(filter_name, sizeof(filter_name),
+            "%scolo", netdev_id);
+
+    filter = object_new_with_props(TYPE_FILTER_BUFFER,
+                        object_get_objects_root(),
+                        filter_name, NULL,
+                        "netdev", netdev_id,
+                        "status", "disable",
+                        NULL);
+    if (!filter) {
+        return;
+    }
+    nf =  NETFILTER(filter);
+    /* Only buffer the packets that sent out by VM */
+    nf->direction = NET_FILTER_DIRECTION_RX;
+    filternode = g_new0(COLOListNode, 1);
+    filternode->opaque = nf;
+    QLIST_INSERT_HEAD(&COLOBufferFilters, filternode, node);
 }
 
 static void colo_process_checkpoint(MigrationState *s)
