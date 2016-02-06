@@ -18,6 +18,8 @@
 #include "qemu/error-report.h"
 #include "migration/failover.h"
 #include "qapi-event.h"
+#include "net/net.h"
+#include "net/filter.h"
 
 static bool vmstate_loading;
 
@@ -378,6 +380,24 @@ static int colo_prepare_before_save(MigrationState *s)
         error_report("Save vm state begin error");
     }
     return ret;
+}
+
+void colo_add_buffer_filter(const char *netdev_id, void *opaque)
+{
+    NetFilterState *nf;
+    char filter_name[128];
+    Error *errp = NULL;
+
+    snprintf(filter_name, sizeof(filter_name),
+            "%scolo", netdev_id);
+    nf = netdev_add_filter(netdev_id, TYPE_FILTER_BUFFER, filter_name, false,
+                           &errp);
+    if (errp) {
+        error_report_err(errp);
+        return;
+    }
+    /* Only buffer the packets that sent out by VM */
+    nf->direction = NET_FILTER_DIRECTION_RX;
 }
 
 static void colo_process_checkpoint(MigrationState *s)

@@ -13,6 +13,7 @@
 
 #include <migration/colo.h>
 #include "trace.h"
+#include <net/net.h>
 
 typedef struct {
      bool colo_requested;
@@ -58,6 +59,10 @@ static const VMStateDescription colo_state = {
 void colo_info_init(void)
 {
     vmstate_register(NULL, 0, &colo_state, &colo_info);
+    /* FIXME: Remove this after COLO switch to use colo-proxy */
+    if (colo_supported()) {
+        netdev_init_add_handler(colo_add_buffer_filter, NULL);
+    }
 }
 
 bool migration_incoming_enable_colo(void)

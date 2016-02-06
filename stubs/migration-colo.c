@@ -48,3 +48,7 @@ bool colo_shutdown(void)
 {
     return false;
 }
+
+void colo_add_buffer_filter(const char *netdev_id, void *opaque)
+{
+}
