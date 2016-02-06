@@ -124,6 +124,17 @@ static void colo_set_filter_status(const char *status, Error **errp)
     }
 }
 
+static void colo_flush_filter_packets(Error **errp)
+{
+    struct COLOListNode *e, *next;
+    NetFilterState *nf;
+
+    QLIST_FOREACH_SAFE(e, &COLOBufferFilters, node, next) {
+        nf = e->opaque;
+        filter_buffer_flush(nf);
+    }
+}
+
 static void primary_vm_do_failover(void)
 {
     MigrationState *s = migrate_get_current();
@@ -157,6 +168,7 @@ static void primary_vm_do_failover(void)
     if (local_err) {
         error_report_err(local_err);
     }
+    colo_flush_filter_packets(NULL);
 
     /* Notify COLO thread that failover work is finished */
     qemu_sem_post(&s->colo_sem);
@@ -364,6 +376,8 @@ static int colo_do_checkpoint_transaction(MigrationState *s,
     if (local_err) {
         goto out;
     }
+    /* FIXME: Remove this after switch to use colo-proxy */
+    colo_flush_filter_packets(NULL);
 
     if (colo_shutdown_requested) {
         colo_put_cmd(s->to_dst_file, COLO_MESSAGE_GUEST_SHUTDOWN, &local_err);
