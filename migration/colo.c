@@ -118,6 +118,19 @@ static void colo_set_filter_status(NetFilterState *nf, void *opaque,
     object_property_set_str(OBJECT(nf), status, "status", errp);
 }
 
+static void colo_flush_filter_packets(NetFilterState *nf, void *opaque,
+                                      Error **errp)
+{
+    char colo_filter[128];
+    char *name = object_get_canonical_path_component(OBJECT(nf));
+
+    snprintf(colo_filter, sizeof(colo_filter), "%scolo", nf->netdev_id);
+    if (strcmp(colo_filter, name)) {
+        return;
+    }
+    filter_buffer_flush(nf);
+}
+
 static void primary_vm_do_failover(void)
 {
     MigrationState *s = migrate_get_current();
@@ -154,6 +167,7 @@ static void primary_vm_do_failover(void)
     if (local_err) {
         error_report_err(local_err);
     }
+    qemu_foreach_netfilter(colo_flush_filter_packets, NULL, NULL);
 
     /* Notify COLO thread that failover work is finished */
     qemu_sem_post(&s->colo_sem);
@@ -361,6 +375,8 @@ static int colo_do_checkpoint_transaction(MigrationState *s,
     if (local_err) {
         goto out;
     }
+    /* FIXME: Remove this after switch to use colo-proxy */
+    qemu_foreach_netfilter(colo_flush_filter_packets, NULL, NULL);
 
     if (colo_shutdown_requested) {
         colo_put_cmd(s->to_dst_file, COLO_MESSAGE_GUEST_SHUTDOWN, &local_err);
