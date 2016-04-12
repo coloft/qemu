@@ -875,6 +875,9 @@ void qmp_migrate_set_parameters(bool has_compress_level,
 
     if (has_x_checkpoint_delay) {
         s->parameters.x_checkpoint_delay = x_checkpoint_delay;
+        if (migration_in_colo_state()) {
+            colo_checkpoint_notify(s);
+        }
     }
 }
 
