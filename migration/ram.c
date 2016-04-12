@@ -2662,6 +2662,7 @@ int colo_init_ram_cache(void)
     migration_bitmap_rcu = g_new0(struct BitmapRcu, 1);
     migration_bitmap_rcu->bmap = bitmap_new(ram_cache_pages);
     migration_dirty_pages = 0;
+    memory_global_dirty_log_start();
 
     return 0;
 
@@ -2710,13 +2711,24 @@ void colo_flush_ram_cache(void)
     void *src_host;
     ram_addr_t offset = 0;
 
+    memory_global_dirty_log_sync();
+    qemu_mutex_lock(&migration_bitmap_mutex);
+    rcu_read_lock();
+    QLIST_FOREACH_RCU(block, &ram_list.blocks, next) {
+        migration_bitmap_sync_range(block->offset, block->used_length);
+    }
+    rcu_read_unlock();
+    qemu_mutex_unlock(&migration_bitmap_mutex);
+
     trace_colo_flush_ram_cache_begin(migration_dirty_pages);
     rcu_read_lock();
     block = QLIST_FIRST_RCU(&ram_list.blocks);
+
     while (block) {
         ram_addr_t ram_addr_abs;
         offset = migration_bitmap_find_dirty(block, offset, &ram_addr_abs);
         migration_bitmap_clear_dirty(ram_addr_abs);
+
         if (offset >= block->used_length) {
             offset = 0;
             block = QLIST_NEXT_RCU(block, next);
@@ -2726,10 +2738,12 @@ void colo_flush_ram_cache(void)
             memcpy(dst_host, src_host, TARGET_PAGE_SIZE);
         }
     }
+
     rcu_read_unlock();
     trace_colo_flush_ram_cache_end();
     assert(migration_dirty_pages == 0);
 }
+
 
 static SaveVMHandlers savevm_ram_handlers = {
     .save_live_setup = ram_save_setup,
