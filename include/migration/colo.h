@@ -39,5 +39,6 @@ void colo_do_failover(MigrationState *s);
 bool colo_handle_shutdown(void);
 bool colo_shutdown(void);
 void colo_add_buffer_filter(Notifier *notifier, void *data);
+void colo_checkpoint_notify(void *opaque);
 
 #endif
