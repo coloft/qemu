@@ -23,6 +23,9 @@
 #include "qmp-commands.h"
 #include "net/colo-compare.h"
 #include "net/colo.h"
+#include "qapi-event.h"
+#include "block/block.h"
+#include "replication.h"
 
 static bool vmstate_loading;
 static Notifier packets_compare_notifier;
@@ -57,6 +60,7 @@ static void secondary_vm_do_failover(void)
 {
     int old_state;
     MigrationIncomingState *mis = migration_incoming_get_current();
+    Error *local_err = NULL;
 
     /* Can not do failover during the process of VM's loading VMstate, Or
      * it will break the secondary VM.
@@ -73,6 +77,11 @@ static void secondary_vm_do_failover(void)
 
     migrate_set_state(&mis->state, MIGRATION_STATUS_COLO,
                       MIGRATION_STATUS_COMPLETED);
+
+    replication_stop_all(true, &local_err);
+    if (local_err) {
+        error_report_err(local_err);
+    }
 
     if (!autostart) {
         error_report("\"-S\" qemu option will be ignored in secondary side");
@@ -111,6 +120,7 @@ static void primary_vm_do_failover(void)
 {
     MigrationState *s = migrate_get_current();
     int old_state;
+    Error *local_err = NULL;
 
     migrate_set_state(&s->state, MIGRATION_STATUS_COLO,
                       MIGRATION_STATUS_COMPLETED);
@@ -134,6 +144,12 @@ static void primary_vm_do_failover(void)
                      FailoverStatus_lookup[old_state]);
         return;
     }
+
+    replication_stop_all(true, &local_err);
+    if (local_err) {
+        error_report_err(local_err);
+    }
+
     /* Notify COLO thread that failover work is finished */
     qemu_sem_post(&s->colo_exit_sem);
 }
@@ -346,6 +362,15 @@ static int colo_do_checkpoint_transaction(MigrationState *s,
     s->params.shared = 0;
     qemu_savevm_state_header(fb);
     qemu_savevm_state_begin(fb, &s->params);
+
+    /* We call this API although this may do nothing on primary side. */
+    qemu_mutex_lock_iothread();
+    replication_do_checkpoint_all(&local_err);
+    qemu_mutex_unlock_iothread();
+    if (local_err) {
+        goto out;
+    }
+
     qemu_mutex_lock_iothread();
     qemu_savevm_state_complete_precopy(fb, false);
     qemu_mutex_unlock_iothread();
@@ -452,6 +477,12 @@ static void colo_process_checkpoint(MigrationState *s)
     object_unref(OBJECT(bioc));
 
     qemu_mutex_lock_iothread();
+    replication_start_all(REPLICATION_MODE_PRIMARY, &local_err);
+    if (local_err) {
+        qemu_mutex_unlock_iothread();
+        goto out;
+    }
+
     vm_start();
     qemu_mutex_unlock_iothread();
     trace_colo_vm_state_change("stop", "run");
@@ -546,6 +577,7 @@ static void colo_wait_handle_message(QEMUFile *f, int *checkpoint_request,
     case COLO_MESSAGE_GUEST_SHUTDOWN:
         qemu_mutex_lock_iothread();
         vm_stop_force_state(RUN_STATE_COLO);
+        replication_stop_all(false, NULL);
         qemu_system_shutdown_request_core();
         qemu_mutex_unlock_iothread();
         /*
@@ -592,6 +624,18 @@ void *colo_process_incoming_thread(void *opaque)
     bioc = qio_channel_buffer_new(COLO_BUFFER_BASE_SIZE);
     fb = qemu_fopen_channel_input(QIO_CHANNEL(bioc));
     object_unref(OBJECT(bioc));
+
+    qemu_mutex_lock_iothread();
+    bdrv_invalidate_cache_all(&local_err);
+    if (local_err) {
+        qemu_mutex_unlock_iothread();
+        goto out;
+    }
+    replication_start_all(REPLICATION_MODE_SECONDARY, &local_err);
+    qemu_mutex_unlock_iothread();
+    if (local_err) {
+        goto out;
+    }
 
     colo_send_message(mis->to_src_file, COLO_MESSAGE_CHECKPOINT_READY,
                       &local_err);
@@ -665,6 +709,18 @@ void *colo_process_incoming_thread(void *opaque)
         vmstate_loading = true;
         if (qemu_loadvm_state(fb) < 0) {
             error_report("COLO: loadvm failed");
+            qemu_mutex_unlock_iothread();
+            goto out;
+        }
+
+        replication_get_error_all(&local_err);
+        if (local_err) {
+            qemu_mutex_unlock_iothread();
+            goto out;
+        }
+        /* discard colo disk buffer */
+        replication_do_checkpoint_all(&local_err);
+        if (local_err) {
             qemu_mutex_unlock_iothread();
             goto out;
         }
