@@ -373,10 +373,10 @@ int postcopy_ram_prepare_discard(MigrationIncomingState *mis)
     return 0;
 }
 
-static int ram_set_pages_wp(uint64_t page_addr,
-                            uint64_t size,
-                            bool remove,
-                            int uffd)
+int ram_set_pages_wp(uint64_t page_addr,
+                     uint64_t size,
+                     bool remove,
+                     int uffd)
 {
     struct uffdio_writeprotect wp_struct;
 
@@ -533,6 +533,17 @@ static void *postcopy_ram_fault_thread(void *opaque)
                 /* Save some space */
                 migrate_send_rp_req_pages(mis, NULL,
                                           rb_offset, hostpagesize);
+            }
+        } else { /* UFFDIO_REGISTER_MODE_WP */
+            MigrationState *ms = container_of(us, MigrationState,
+                                              userfault_state);
+            ret = ram_save_queue_pages(ms, qemu_ram_get_idstr(rb), rb_offset,
+                                       hostpagesize);
+
+            if (ret < 0) {
+                error_report("%s: Save: %"PRIx64 " failed!",
+                             __func__, (uint64_t)msg.arg.pagefault.address);
+                break;
             }
         }
     }

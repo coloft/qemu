@@ -734,9 +734,13 @@ static int ram_save_page(QEMUFile *f, PageSearchStatus *pss,
     ram_addr_t current_addr;
     uint8_t *p;
     int ret;
-    bool send_async = true;
     RAMBlock *block = pss->block;
     ram_addr_t offset = pss->offset;
+    /*
+     * For snapshot, we should not be async, or the content of page may be
+     * changed before it is really been saved.
+     */
+    bool send_async = !migration_in_snapshot(migrate_get_current());
 
     p = block->host + offset;
 
@@ -1085,7 +1089,7 @@ static bool get_queued_page(MigrationState *ms, PageSearchStatus *pss,
          * even if this queue request was received after the background
          * search already sent it.
          */
-        if (block) {
+        if (block && !migration_in_snapshot(ms)) {
             unsigned long *bitmap;
             bitmap = atomic_rcu_read(&migration_bitmap_rcu)->bmap;
             dirty = test_bit(*ram_addr_abs >> TARGET_PAGE_BITS, bitmap);
@@ -1351,6 +1355,19 @@ static int ram_find_and_save_block(QEMUFile *f, bool last_stage,
             pages = ram_save_host_page(ms, f, &pss,
                                        last_stage, bytes_transferred,
                                        dirty_ram_abs);
+            /* For snapshot, we will remove the page write-protect here */
+            if (migration_in_snapshot(ms)) {
+                int ret;
+                uint64_t host_addr = (uint64_t)(pss.block->host + pss.offset);
+
+                ret = ram_set_pages_wp(host_addr, getpagesize(), true,
+                                       ms->userfault_state.userfault_fd);
+                if (ret < 0) {
+                    error_report("Failed to remove the write-protect for page:"
+                                 "%"PRIx64 " length: %d, block: %s", host_addr,
+                                 getpagesize(), pss.block->idstr);
+                }
+            }
         }
     } while (!pages && again);
 
@@ -2034,7 +2051,8 @@ static int ram_save_complete(QEMUFile *f, void *opaque)
 {
     rcu_read_lock();
 
-    if (!migration_in_postcopy(migrate_get_current())) {
+    if (!migration_in_postcopy(migrate_get_current()) &&
+        !migration_in_snapshot(migrate_get_current())) {
         migration_bitmap_sync();
     }
 

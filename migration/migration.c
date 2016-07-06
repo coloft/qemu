@@ -39,7 +39,6 @@
 #include "hw/boards.h" /* Fix me: Remove this if we support snapshot for KVM */
 #include <linux/userfaultfd.h>
 
-
 #define MAX_THROTTLE  (32 << 20)      /* Migration transfer speed throttling */
 
 /* Amount of time to allocate to each "chunk" of bandwidth-throttled
@@ -1904,7 +1903,19 @@ static void *snapshot_thread(void *opaque)
 
     trace_snapshot_thread_setup_complete();
 
-    /* Save VM's Live state, such as RAM */
+    while (qemu_file_get_error(ms->to_dst_file) == 0) {
+        if (qemu_savevm_state_iterate(ms->to_dst_file, false) > 0) {
+            break;
+        }
+    }
+
+    ret = qemu_file_get_error(ms->to_dst_file);
+    if (ret == 0) {
+        qemu_savevm_state_complete_precopy(ms->to_dst_file, true);
+    } else {
+        migrate_set_state(&ms->state, MIGRATION_STATUS_ACTIVE, MIGRATION_STATUS_FAILED);
+        goto out;
+    }
 
     qemu_save_buffer_file(ms, buffer);
     ret = qemu_file_get_error(ms->to_dst_file);
@@ -1914,7 +1925,7 @@ static void *snapshot_thread(void *opaque)
         migrate_set_state(&ms->state, MIGRATION_STATUS_ACTIVE,
                           MIGRATION_STATUS_COMPLETED);
     }
-
+out:
     postcopy_ram_disable_notify(&ms->userfault_state);
 
     qemu_mutex_lock_iothread();

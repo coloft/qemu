@@ -96,6 +96,10 @@ int postcopy_place_page_zero(MigrationIncomingState *mis, void *host);
  */
 void *postcopy_get_tmp_page(MigrationIncomingState *mis);
 
+int ram_set_pages_wp(uint64_t page_addr,
+                     uint64_t size,
+                     bool remove,
+                     int uffd);
 int postcopy_ram_disable_notify(UserfaultState *us);
 
 void qemu_mlock_all_memory(void);
