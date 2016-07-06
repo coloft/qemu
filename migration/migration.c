@@ -1862,6 +1862,10 @@ static void *migration_thread(void *opaque)
 
 static void *snapshot_thread(void *opaque)
 {
+    MigrationState *ms = opaque;;
+    bool old_vm_running = false;
+    int ret;
+
     rcu_register_thread();
     /* Fix me: Remove this if we support snapshot for KVM */
     if (strcmp(current_machine->accel, "tcg")) {
@@ -1869,8 +1873,38 @@ static void *snapshot_thread(void *opaque)
         goto error;
     }
 
-    /* TODO: create memory snapshot */
+    qemu_savevm_state_header(ms->to_dst_file);
+    qemu_savevm_state_begin(ms->to_dst_file, &ms->params);
 
+    qemu_mutex_lock_iothread();
+    qemu_system_wakeup_request(QEMU_WAKEUP_REASON_OTHER);
+    old_vm_running = runstate_is_running();
+    ret = global_state_store();
+    if (!ret) {
+        ret = vm_stop_force_state(RUN_STATE_SAVE_VM);
+        if (ret < 0) {
+            error_report("Failed to stop VM");
+            goto error;
+        }
+    }
+
+    /* TODO: other setup work */
+
+    if (old_vm_running) {
+        vm_start();
+    }
+    qemu_mutex_unlock_iothread();
+
+    migrate_set_state(&ms->state, MIGRATION_STATUS_SETUP, MIGRATION_STATUS_ACTIVE);
+
+    trace_snapshot_thread_setup_complete();
+
+    /* Save VM's state */
+
+    qemu_mutex_lock_iothread();
+    qemu_savevm_state_cleanup();
+    qemu_bh_schedule(ms->cleanup_bh);
+    qemu_mutex_unlock_iothread();
 error:
     rcu_unregister_thread();
     return NULL;
