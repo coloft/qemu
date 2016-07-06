@@ -1860,9 +1860,21 @@ static void *migration_thread(void *opaque)
 
 static void *snapshot_thread(void *opaque)
 {
+    MigrationState *ms = opaque;;
+    int ret;
+
     rcu_register_thread();
 
-    /* TODO: create memory snapshot */
+    qemu_mutex_lock_iothread();
+    ret = vm_stop_force_state(RUN_STATE_SAVE_VM);
+    if (ret < 0) {
+        error_report("Failed to stop VM");
+        goto error;
+    }
+
+    /* TODO: other setup work */
+    vm_start();
+    qemu_mutex_unlock_iothread();
 
 error:
     rcu_unregister_thread();

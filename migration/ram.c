@@ -1938,9 +1938,11 @@ static int ram_save_setup(QEMUFile *f, void *opaque)
      * gaps due to alignment or unplugs.
      */
     migration_dirty_pages = ram_bytes_total() >> TARGET_PAGE_BITS;
-
-    memory_global_dirty_log_start();
-    migration_bitmap_sync();
+    /* For snapshot, we don't need to enable global dirty log */
+    if (!migration_in_snapshot(migrate_get_current())) {
+        memory_global_dirty_log_start();
+        migration_bitmap_sync();
+    }
     qemu_mutex_unlock_ramlist();
     qemu_mutex_unlock_iothread();
 
