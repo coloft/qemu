@@ -237,6 +237,7 @@ struct PageSearchStatus {
     ram_addr_t   offset;
     /* Set once we wrap around */
     bool         complete_round;
+    uint8_t *pages_copy;
 };
 typedef struct PageSearchStatus PageSearchStatus;
 
@@ -742,7 +743,12 @@ static int ram_save_page(QEMUFile *f, PageSearchStatus *pss,
      */
     bool send_async = !migration_in_snapshot(migrate_get_current());
 
-    p = block->host + offset;
+    /* If we have a copy of this page, use the backup page first */
+    if (pss->pages_copy) {
+        p = pss->pages_copy;
+    } else {
+        p = block->host + offset;
+    }
 
     /* In doubt sent page as normal */
     bytes_xmit = 0;
@@ -919,7 +925,12 @@ static int ram_save_compressed_page(QEMUFile *f, PageSearchStatus *pss,
     RAMBlock *block = pss->block;
     ram_addr_t offset = pss->offset;
 
-    p = block->host + offset;
+    /* If we have a copy of this page, use the backup first */
+    if (pss->pages_copy) {
+        p = pss->pages_copy;
+    } else {
+        p = block->host + offset;
+    }
 
     ret = ram_control_save_page(f, block->offset,
                                 offset, TARGET_PAGE_SIZE, &bytes_xmit);
@@ -1037,7 +1048,7 @@ static bool find_dirty_block(QEMUFile *f, PageSearchStatus *pss,
  * Returns:      block (or NULL if none available)
  */
 static RAMBlock *unqueue_page(MigrationState *ms, ram_addr_t *offset,
-                              ram_addr_t *ram_addr_abs)
+                              ram_addr_t *ram_addr_abs, uint8_t **pages_copy_addr)
 {
     RAMBlock *block = NULL;
 
@@ -1049,7 +1060,7 @@ static RAMBlock *unqueue_page(MigrationState *ms, ram_addr_t *offset,
         *offset = entry->offset;
         *ram_addr_abs = (entry->offset + entry->rb->offset) &
                         TARGET_PAGE_MASK;
-
+        *pages_copy_addr = entry->pages_copy_addr;
         if (entry->len > TARGET_PAGE_SIZE) {
             entry->len -= TARGET_PAGE_SIZE;
             entry->offset += TARGET_PAGE_SIZE;
@@ -1080,9 +1091,10 @@ static bool get_queued_page(MigrationState *ms, PageSearchStatus *pss,
     RAMBlock  *block;
     ram_addr_t offset;
     bool dirty;
+    uint8_t *pages_backup_addr = NULL;
 
     do {
-        block = unqueue_page(ms, &offset, ram_addr_abs);
+        block = unqueue_page(ms, &offset, ram_addr_abs, &pages_backup_addr);
         /*
          * We're sending this page, and since it's postcopy nothing else
          * will dirty it, and we must make sure it doesn't get sent again
@@ -1124,6 +1136,7 @@ static bool get_queued_page(MigrationState *ms, PageSearchStatus *pss,
          */
         pss->block = block;
         pss->offset = offset;
+        pss->pages_copy = pages_backup_addr;
     }
 
     return !!block;
@@ -1160,7 +1173,7 @@ void flush_page_queue(MigrationState *ms)
  *   Return: 0 on success
  */
 int ram_save_queue_pages(MigrationState *ms, const char *rbname,
-                         ram_addr_t start, ram_addr_t len)
+                         ram_addr_t start, ram_addr_t len, bool copy_pages)
 {
     RAMBlock *ramblock;
 
@@ -1201,6 +1214,17 @@ int ram_save_queue_pages(MigrationState *ms, const char *rbname,
     new_entry->rb = ramblock;
     new_entry->offset = start;
     new_entry->len = len;
+    if (copy_pages) {
+        /* Fix me: Better to realize a memory pool */
+        new_entry->pages_copy_addr = g_try_malloc0(len);
+
+        if (!new_entry->pages_copy_addr) {
+            error_report("%s: Failed to alloc memory", __func__);
+            return -1;
+        }
+
+        memcpy(new_entry->pages_copy_addr, ramblock_ptr(ramblock, start), len);
+    }
 
     memory_region_ref(ramblock->mr);
     qemu_mutex_lock(&ms->src_page_req_mutex);
@@ -1337,6 +1361,7 @@ static int ram_find_and_save_block(QEMUFile *f, bool last_stage,
     pss.block = last_seen_block;
     pss.offset = last_offset;
     pss.complete_round = false;
+    pss.pages_copy = NULL;
 
     if (!pss.block) {
         pss.block = QLIST_FIRST_RCU(&ram_list.blocks);

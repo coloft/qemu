@@ -538,12 +538,27 @@ static void *postcopy_ram_fault_thread(void *opaque)
             MigrationState *ms = container_of(us, MigrationState,
                                               userfault_state);
             ret = ram_save_queue_pages(ms, qemu_ram_get_idstr(rb), rb_offset,
-                                       hostpagesize);
+                                       hostpagesize, true);
 
             if (ret < 0) {
                 error_report("%s: Save: %"PRIx64 " failed!",
                              __func__, (uint64_t)msg.arg.pagefault.address);
                 break;
+            }
+
+            /* Note: In the setup process, snapshot_thread may modify VM's
+            * write-protected pages, we should not block it there, or there
+            * will be an deadlock error.
+            */
+            if (migration_in_setup(ms)) {
+                uint64_t host = msg.arg.pagefault.address;
+
+                host &= ~(hostpagesize - 1);
+                ret = ram_set_pages_wp(host, getpagesize(), true,
+                                       us->userfault_fd);
+                if (ret < 0) {
+                    error_report("Remove page's write-protect failed");
+                }
             }
         }
     }

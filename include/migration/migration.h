@@ -129,7 +129,7 @@ struct MigrationSrcPageRequest {
     RAMBlock *rb;
     hwaddr    offset;
     hwaddr    len;
-
+    uint8_t *pages_copy_addr;
     QSIMPLEQ_ENTRY(MigrationSrcPageRequest) next_req;
 };
 
@@ -366,7 +366,7 @@ void global_state_store_running(void);
 
 void flush_page_queue(MigrationState *ms);
 int ram_save_queue_pages(MigrationState *ms, const char *rbname,
-                         ram_addr_t start, ram_addr_t len);
+                         ram_addr_t start, ram_addr_t len, bool copy_pages);
 
 PostcopyState postcopy_state_get(void);
 /* Set the state and return the old state */
