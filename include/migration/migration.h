@@ -86,6 +86,8 @@ struct UserfaultState {
     int       userfault_fd;
     /* To tell the fault_thread to quit */
     int       userfault_quit_fd;
+    /* UFFDIO_REGISTER_MODE_MISSING or UFFDIO_REGISTER_MODE_WP*/
+    int       mode;
 };
 
 /* State for the incoming migration */
