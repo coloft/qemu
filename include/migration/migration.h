@@ -223,7 +223,11 @@ void unix_start_outgoing_migration(MigrationState *s, const char *path, Error **
 
 void fd_start_incoming_migration(const char *path, Error **errp);
 
-void fd_start_outgoing_migration(MigrationState *s, const char *fdname, Error **errp);
+void fd_start_outgoing_migration(MigrationState *s, const char *fdname,
+                                 int outfd, Error **errp);
+
+void file_start_outgoing_migration(MigrationState *s, const char *filename,
+                                   Error **errp);
 
 void rdma_start_outgoing_migration(void *opaque, const char *host_port, Error **errp);
 

@@ -23,10 +23,11 @@
 #include "trace.h"
 
 
-void fd_start_outgoing_migration(MigrationState *s, const char *fdname, Error **errp)
+void fd_start_outgoing_migration(MigrationState *s, const char *fdname,
+                                int outfd, Error **errp)
 {
     QIOChannel *ioc;
-    int fd = monitor_get_fd(cur_mon, fdname, errp);
+    int fd = fdname ? monitor_get_fd(cur_mon, fdname, errp) : outfd;
     if (fd == -1) {
         return;
     }
@@ -41,6 +42,20 @@ void fd_start_outgoing_migration(MigrationState *s, const char *fdname, Error **
     migration_channel_connect(s, ioc, NULL);
     object_unref(OBJECT(ioc));
 }
+
+void file_start_outgoing_migration(MigrationState *s, const char *filename,
+                                   Error **errp)
+{
+    int fd;
+
+    fd = qemu_open(filename, O_CREAT | O_TRUNC | O_WRONLY, S_IRUSR | S_IWUSR);
+    if (fd < 0) {
+        error_setg_errno(errp, errno, "Failed to open file: %s", filename);
+        return;
+    }
+    fd_start_outgoing_migration(s, NULL, fd, errp);
+}
+
 
 static gboolean fd_accept_incoming_migration(QIOChannel *ioc,
                                              GIOCondition condition,
