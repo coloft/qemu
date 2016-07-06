@@ -53,6 +53,10 @@ void file_start_outgoing_migration(MigrationState *s, const char *filename,
         error_setg_errno(errp, errno, "Failed to open file: %s", filename);
         return;
     }
+    /* Fix me: just for test
+    *  we shouldn't use this to identify if we are do snapshot.
+    */
+    s->in_snapshot = true;
     fd_start_outgoing_migration(s, NULL, fd, errp);
 }
 

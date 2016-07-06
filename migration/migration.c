@@ -36,6 +36,7 @@
 #include "exec/address-spaces.h"
 #include "io/channel-buffer.h"
 #include "io/channel-tls.h"
+#include "hw/boards.h" /* Fix me: Remove this if we support snapshot for KVM */
 
 #define MAX_THROTTLE  (32 << 20)      /* Migration transfer speed throttling */
 
@@ -982,6 +983,11 @@ bool migration_in_postcopy_after_devices(MigrationState *s)
     return migration_in_postcopy(s) && s->postcopy_after_devices;
 }
 
+bool migration_in_snapshot(MigrationState *s)
+{
+    return s->in_snapshot;
+}
+
 MigrationState *migrate_init(const MigrationParams *params)
 {
     MigrationState *s = migrate_get_current();
@@ -1854,6 +1860,21 @@ static void *migration_thread(void *opaque)
     return NULL;
 }
 
+static void *snapshot_thread(void *opaque)
+{
+    rcu_register_thread();
+    /* Fix me: Remove this if we support snapshot for KVM */
+    if (strcmp(current_machine->accel, "tcg")) {
+        error_report("snapshot only support 'tcg' accel for now");
+        goto error;
+    }
+
+    /* TODO: create memory snapshot */
+
+error:
+    rcu_unregister_thread();
+    return NULL;
+}
 void migrate_fd_connect(MigrationState *s)
 {
     /* This is a best 1st approximation. ns to ms */
@@ -1882,8 +1903,13 @@ void migrate_fd_connect(MigrationState *s)
     }
 
     migrate_compress_threads_create();
-    qemu_thread_create(&s->thread, "migration", migration_thread, s,
-                       QEMU_THREAD_JOINABLE);
+    if (!s->in_snapshot) {
+        qemu_thread_create(&s->thread, "migration", migration_thread, s,
+                           QEMU_THREAD_JOINABLE);
+    } else {
+       qemu_thread_create(&s->thread, "snapshot", snapshot_thread, s,
+                          QEMU_THREAD_JOINABLE);
+   }
     s->migration_thread_running = true;
 }
 
