@@ -37,6 +37,8 @@
 #include "io/channel-buffer.h"
 #include "io/channel-tls.h"
 #include "hw/boards.h" /* Fix me: Remove this if we support snapshot for KVM */
+#include <linux/userfaultfd.h>
+
 
 #define MAX_THROTTLE  (32 << 20)      /* Migration transfer speed throttling */
 
@@ -1741,6 +1743,8 @@ static void *migration_thread(void *opaque)
          */
         qemu_savevm_send_postcopy_advise(s->to_dst_file);
     }
+    /* userfaultfd's write-protected capability need all pages to be exist */
+    qemu_mlock_all_memory();
 
     qemu_savevm_state_begin(s->to_dst_file, &s->params);
 
@@ -1871,10 +1875,12 @@ static void *snapshot_thread(void *opaque)
         error_report("Failed to stop VM");
         goto error;
     }
+    postcopy_ram_enable_notify(&ms->userfault_state, UFFDIO_REGISTER_MODE_WP);
 
-    /* TODO: other setup work */
     vm_start();
     qemu_mutex_unlock_iothread();
+
+ //   postcopy_ram_disable_notify(&ms->userfault_state);
 
 error:
     rcu_unregister_thread();

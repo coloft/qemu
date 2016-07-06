@@ -182,6 +182,9 @@ struct MigrationState
     QSIMPLEQ_HEAD(src_page_requests, MigrationSrcPageRequest) src_page_requests;
     /* The RAMBlock used in the last src_page_request */
     RAMBlock *last_req_rb;
+
+    UserfaultState userfault_state;
+
     bool in_snapshot; /* for snapshot */
 
     /* The last error that occurred */
