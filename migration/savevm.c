@@ -1014,17 +1014,11 @@ void qemu_savevm_state_complete_postcopy(QEMUFile *f)
     qemu_fflush(f);
 }
 
-void qemu_savevm_state_complete_precopy(QEMUFile *f, bool iterable_only)
+static int qemu_savevm_section_end(QEMUFile *f, bool iterable_only)
 {
-    QJSON *vmdesc;
-    int vmdesc_len;
     SaveStateEntry *se;
     int ret;
     bool in_postcopy = migration_in_postcopy(migrate_get_current());
-
-    trace_savevm_state_complete_precopy();
-
-    cpu_synchronize_all_states();
 
     QTAILQ_FOREACH(se, &savevm_state.handlers, entry) {
         if (!se->ops ||
@@ -1048,13 +1042,18 @@ void qemu_savevm_state_complete_precopy(QEMUFile *f, bool iterable_only)
         save_section_footer(f, se);
         if (ret < 0) {
             qemu_file_set_error(f, ret);
-            return;
+            return -1;
         }
     }
+    return 0;
+}
 
-    if (iterable_only) {
-        return;
-    }
+static void qemu_savevm_section_full(QEMUFile *f)
+{
+    QJSON *vmdesc;
+    int vmdesc_len;
+    SaveStateEntry *se;
+    bool in_postcopy = migration_in_postcopy(migrate_get_current());
 
     vmdesc = qjson_new();
     json_prop_int(vmdesc, "page_size", TARGET_PAGE_SIZE);
@@ -1098,9 +1097,29 @@ void qemu_savevm_state_complete_precopy(QEMUFile *f, bool iterable_only)
         qemu_put_buffer(f, (uint8_t *)qjson_get_str(vmdesc), vmdesc_len);
     }
     qjson_destroy(vmdesc);
-
-    qemu_fflush(f);
 }
+
+void qemu_savevm_state_complete_precopy(QEMUFile *f, bool iterable_only)
+{
+    int ret;
+
+    trace_savevm_state_complete_precopy();
+
+    cpu_synchronize_all_states();
+
+    ret = qemu_savevm_section_end(f, iterable_only);
+    if (ret < 0) {
+        return;
+    }
+
+    if (iterable_only) {
+        return;
+    }
+
+    qemu_savevm_section_full(f);
+
+     qemu_fflush(f);
+ }
 
 /* Give an estimate of the amount left to be transferred,
  * the result is split into the amount for units that can and
