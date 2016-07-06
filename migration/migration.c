@@ -1864,6 +1864,7 @@ static void *snapshot_thread(void *opaque)
 {
     MigrationState *ms = opaque;;
     bool old_vm_running = false;
+    QIOChannelBuffer *buffer = NULL;
     int ret;
 
     rcu_register_thread();
@@ -1888,7 +1889,7 @@ static void *snapshot_thread(void *opaque)
         }
     }
 
-    /* TODO: other setup work */
+    buffer = qemu_save_device_buffer();
 
     if (old_vm_running) {
         vm_start();
@@ -1899,7 +1900,16 @@ static void *snapshot_thread(void *opaque)
 
     trace_snapshot_thread_setup_complete();
 
-    /* Save VM's state */
+    /* Save VM's Live state, such as RAM */
+
+    qemu_save_buffer_file(ms, buffer);
+    ret = qemu_file_get_error(ms->to_dst_file);
+    if (ret < 0) {
+        migrate_set_state(&ms->state, MIGRATION_STATUS_ACTIVE, MIGRATION_STATUS_FAILED);
+    } else {
+        migrate_set_state(&ms->state, MIGRATION_STATUS_ACTIVE,
+                          MIGRATION_STATUS_COMPLETED);
+    }
 
     qemu_mutex_lock_iothread();
     qemu_savevm_state_cleanup();

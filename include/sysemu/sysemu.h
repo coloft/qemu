@@ -10,6 +10,7 @@
 #include "qemu/main-loop.h"
 #include "qemu/bitmap.h"
 #include "qom/object.h"
+#include "io/channel-buffer.h"
 
 /* vl.c */
 
@@ -111,6 +112,9 @@ void qemu_savevm_state_begin(QEMUFile *f,
 void qemu_savevm_state_header(QEMUFile *f);
 int qemu_savevm_state_iterate(QEMUFile *f, bool postcopy);
 void qemu_savevm_state_cleanup(void);
+QIOChannelBuffer *qemu_save_device_buffer(void);
+int qemu_save_buffer_file(MigrationState *s, QIOChannelBuffer *buffer);
+
 void qemu_savevm_state_complete_postcopy(QEMUFile *f);
 void qemu_savevm_state_complete_precopy(QEMUFile *f, bool iterable_only);
 void qemu_savevm_state_pending(QEMUFile *f, uint64_t max_size,

@@ -62,6 +62,8 @@
 #define ARP_PTYPE_IP 0x0800
 #define ARP_OP_REQUEST_REV 0x3
 
+#define BUFFER_BASE_SIZE (4 * 1024 * 1024)
+
 const unsigned int postcopy_ram_discard_version = 0;
 
 static bool skip_section_footers;
@@ -2373,4 +2375,26 @@ void vmstate_unregister_ram(MemoryRegion *mr, DeviceState *dev)
 void vmstate_register_ram_global(MemoryRegion *mr)
 {
     vmstate_register_ram(mr, NULL);
+}
+
+QIOChannelBuffer *qemu_save_device_buffer(void)
+{
+    QIOChannelBuffer *bioc;
+    QEMUFile *fb = NULL;
+
+    bioc = qio_channel_buffer_new(BUFFER_BASE_SIZE);
+    fb = qemu_fopen_channel_output(QIO_CHANNEL(bioc));
+    object_unref(OBJECT(bioc));
+
+    cpu_synchronize_all_states();
+    qemu_savevm_section_full(fb);
+    qemu_fflush(fb);
+    return bioc;
+}
+
+int qemu_save_buffer_file(MigrationState *s, QIOChannelBuffer *buffer)
+{
+    qemu_put_buffer(s->to_dst_file, buffer->data, buffer->usage);
+    qemu_fflush(s->to_dst_file);
+    return qemu_file_get_error(s->to_dst_file);
 }
