@@ -1472,7 +1472,7 @@ static int loadvm_postcopy_handle_listen(MigrationIncomingState *mis)
      * However, at this point the CPU shouldn't be running, and the IO
      * shouldn't be doing anything yet so don't actually expect requests
      */
-    if (postcopy_ram_enable_notify(mis)) {
+    if (postcopy_ram_enable_notify(&mis->userfault_state)) {
         return -1;
     }
 
