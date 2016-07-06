@@ -96,4 +96,7 @@ int postcopy_place_page_zero(MigrationIncomingState *mis, void *host);
  */
 void *postcopy_get_tmp_page(MigrationIncomingState *mis);
 
+int postcopy_ram_disable_notify(UserfaultState *us);
+
+void qemu_mlock_all_memory(void);
 #endif

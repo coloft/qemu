@@ -275,7 +275,7 @@ int postcopy_ram_incoming_init(MigrationIncomingState *mis, size_t ram_pages)
     return 0;
 }
 
-static int postcopy_ram_disable_notify(UserfaultState *us)
+int postcopy_ram_disable_notify(UserfaultState *us)
 {
     if (us->have_fault_thread) {
         uint64_t tmp64;
@@ -366,9 +366,7 @@ static int nhp_range(const char *block_name, void *host_addr,
  */
 int postcopy_ram_prepare_discard(MigrationIncomingState *mis)
 {
-    if (qemu_ram_foreach_block(nhp_range, mis)) {
-        return -1;
-    }
+
 
     postcopy_state_set(POSTCOPY_INCOMING_DISCARD);
 
@@ -581,6 +579,9 @@ int postcopy_ram_enable_notify(UserfaultState *us, int mode)
         return -1;
     }
 
+    if (qemu_ram_foreach_block(nhp_range, us)) {
+        return -1;
+    }
     /*
      * Ballooning can mark pages as absent while we're postcopying
      * that would cause false userfaults.
@@ -813,4 +814,29 @@ void postcopy_discard_send_finish(MigrationState *ms, PostcopyDiscardState *pds)
                                        pds->nsentcmds);
 
     g_free(pds);
+}
+
+static int ram_block_mlock(const char *block_name, void *host_addr,
+                                   ram_addr_t offset, ram_addr_t length,
+                                   void *opaque)
+{
+   int ret;
+
+    ret = mlock(host_addr, length);
+    if (ret < 0) {
+        error_report("%s mlock failed: %s", __func__, strerror(errno));
+        return -1;
+    }
+    return 0;
+}
+
+void qemu_mlock_all_memory(void)
+{
+    /* Users have configured mlock, so don't do it again */
+    if (enable_mlock) {
+        return;
+    }
+    if (qemu_ram_foreach_block(ram_block_mlock, NULL)) {
+        error_report("mlock all VM's memory failed");
+    }
 }
