@@ -54,6 +54,7 @@
 #include "qemu/cutils.h"
 #include "io/channel-buffer.h"
 #include "io/channel-file.h"
+#include <linux/userfaultfd.h>
 
 #ifndef ETH_P_RARP
 #define ETH_P_RARP 0x8035
@@ -1493,7 +1494,8 @@ static int loadvm_postcopy_handle_listen(MigrationIncomingState *mis)
      * However, at this point the CPU shouldn't be running, and the IO
      * shouldn't be doing anything yet so don't actually expect requests
      */
-    if (postcopy_ram_enable_notify(&mis->userfault_state)) {
+    if (postcopy_ram_enable_notify(&mis->userfault_state,
+                                   UFFDIO_REGISTER_MODE_MISSING)) {
         return -1;
     }
 

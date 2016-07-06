@@ -81,6 +81,11 @@ static bool ufd_version_check(int ufd)
         return false;
     }
 
+    if (!(api_struct.features & UFFD_FEATURE_PAGEFAULT_FLAG_WP)) {
+        error_report("Does not support write protect feature");
+        return false;
+    }
+
     return true;
 }
 
@@ -370,6 +375,31 @@ int postcopy_ram_prepare_discard(MigrationIncomingState *mis)
     return 0;
 }
 
+static int ram_set_pages_wp(uint64_t page_addr,
+                            uint64_t size,
+                            bool remove,
+                            int uffd)
+{
+    struct uffdio_writeprotect wp_struct;
+
+    memset(&wp_struct, 0, sizeof(wp_struct));
+    wp_struct.range.start = (uint64_t)(uintptr_t)page_addr;
+    wp_struct.range.len = size;
+    if (remove) {
+        wp_struct.mode = UFFDIO_WRITEPROTECT_MODE_DONTWAKE;
+    } else {
+        wp_struct.mode = UFFDIO_WRITEPROTECT_MODE_WP;
+    }
+    if (ioctl(uffd, UFFDIO_WRITEPROTECT, &wp_struct)) {
+        int e = errno;
+        error_report("%s: %s  page_addr: 0x%lx",
+                     __func__, strerror(e), page_addr);
+
+        return -e;
+    }
+    return 0;
+}
+
 /*
  * Mark the given area of RAM as requiring notification to unwritten areas
  * Used as a  callback on qemu_ram_foreach_block.
@@ -385,18 +415,26 @@ static int ram_block_enable_notify(const char *block_name, void *host_addr,
 {
     UserfaultState *us = opaque;
     struct uffdio_register reg_struct;
+    int ret = 0;
 
     reg_struct.range.start = (uintptr_t)host_addr;
     reg_struct.range.len = length;
-    reg_struct.mode = UFFDIO_REGISTER_MODE_MISSING;
+    reg_struct.mode = us->mode;
 
     /* Now tell our userfault_fd that it's responsible for this area */
     if (ioctl(us->userfault_fd, UFFDIO_REGISTER, &reg_struct)) {
         error_report("%s userfault register: %s", __func__, strerror(errno));
         return -1;
     }
+    /* We need to remove the write permission for pages to enable kernel
+    * notify us.
+    */
+    if (us->mode == UFFDIO_REGISTER_MODE_WP) {
+        ret = ram_set_pages_wp((uintptr_t)host_addr, length, false,
+                                us->userfault_fd);
+    }
 
-    return 0;
+    return ret;
 }
 
 /*
@@ -410,8 +448,6 @@ static void *postcopy_ram_fault_thread(void *opaque)
     size_t hostpagesize = getpagesize();
     RAMBlock *rb = NULL;
     RAMBlock *last_rb = NULL; /* last RAMBlock we sent part of */
-    MigrationIncomingState *mis = container_of(us, MigrationIncomingState,
-                                               userfault_state);
 
     trace_postcopy_ram_fault_thread_entry();
     qemu_sem_post(&us->fault_thread_sem);
@@ -482,25 +518,31 @@ static void *postcopy_ram_fault_thread(void *opaque)
                                                 qemu_ram_get_idstr(rb),
                                                 rb_offset);
 
-        /*
-         * Send the request to the source - we want to request one
-         * of our host page sizes (which is >= TPS)
-         */
-        if (rb != last_rb) {
-            last_rb = rb;
-            migrate_send_rp_req_pages(mis, qemu_ram_get_idstr(rb),
-                                     rb_offset, hostpagesize);
-        } else {
-            /* Save some space */
-            migrate_send_rp_req_pages(mis, NULL,
-                                     rb_offset, hostpagesize);
+        if (us->mode == UFFDIO_REGISTER_MODE_MISSING) {
+            MigrationIncomingState *mis = container_of(us,
+                                                       MigrationIncomingState,
+                                                       userfault_state);
+
+            /*
+             * Send the request to the source - we want to request one
+             * of our host page sizes (which is >= TPS)
+             */
+            if (rb != last_rb) {
+                last_rb = rb;
+                migrate_send_rp_req_pages(mis, qemu_ram_get_idstr(rb),
+                                          rb_offset, hostpagesize);
+            } else {
+                /* Save some space */
+                migrate_send_rp_req_pages(mis, NULL,
+                                          rb_offset, hostpagesize);
+            }
         }
     }
     trace_postcopy_ram_fault_thread_exit();
     return NULL;
 }
 
-int postcopy_ram_enable_notify(UserfaultState *us)
+int postcopy_ram_enable_notify(UserfaultState *us, int mode)
 {
     /* Open the fd for the kernel to give us userfaults */
     us->userfault_fd = syscall(__NR_userfaultfd, O_CLOEXEC | O_NONBLOCK);
@@ -509,7 +551,7 @@ int postcopy_ram_enable_notify(UserfaultState *us)
                      strerror(errno));
         return -1;
     }
-
+    us->mode = mode;
     /*
      * Although the host check already tested the API, we need to
      * do the check again as an ABI handshake on the new fd.

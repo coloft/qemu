@@ -17,7 +17,7 @@
  * #define UFFD_API_FEATURES (UFFD_FEATURE_PAGEFAULT_FLAG_WP | \
  *			      UFFD_FEATURE_EVENT_FORK)
  */
-#define UFFD_API_FEATURES (0)
+#define UFFD_API_FEATURES (UFFD_FEATURE_PAGEFAULT_FLAG_WP)
 #define UFFD_API_IOCTLS				\
 	((__u64)1 << _UFFDIO_REGISTER |		\
 	 (__u64)1 << _UFFDIO_UNREGISTER |	\
@@ -25,7 +25,8 @@
 #define UFFD_API_RANGE_IOCTLS			\
 	((__u64)1 << _UFFDIO_WAKE |		\
 	 (__u64)1 << _UFFDIO_COPY |		\
-	 (__u64)1 << _UFFDIO_ZEROPAGE)
+     (__u64)1 << _UFFDIO_ZEROPAGE | \
+     (__u64)1 << _UFFDIO_WRITEPROTECT)
 
 /*
  * Valid ioctl command number range with this API is from 0x00 to
@@ -40,6 +41,7 @@
 #define _UFFDIO_WAKE			(0x02)
 #define _UFFDIO_COPY			(0x03)
 #define _UFFDIO_ZEROPAGE		(0x04)
+#define _UFFDIO_WRITEPROTECT    (0x05)
 #define _UFFDIO_API			(0x3F)
 
 /* userfaultfd ioctl ids */
@@ -56,6 +58,9 @@
 				      struct uffdio_copy)
 #define UFFDIO_ZEROPAGE		_IOWR(UFFDIO, _UFFDIO_ZEROPAGE,	\
 				      struct uffdio_zeropage)
+
+#define UFFDIO_WRITEPROTECT    _IOWR(UFFDIO, _UFFDIO_WRITEPROTECT, \
+                     struct uffdio_writeprotect)
 
 /* read() structure */
 struct uffd_msg {
@@ -105,8 +110,9 @@ struct uffdio_api {
 	 * are to be considered implicitly always enabled in all kernels as
 	 * long as the uffdio_api.api requested matches UFFD_API.
 	 */
-#if 0 /* not available yet */
+
 #define UFFD_FEATURE_PAGEFAULT_FLAG_WP		(1<<0)
+#if 0
 #define UFFD_FEATURE_EVENT_FORK			(1<<1)
 #endif
 	__u64 features;
@@ -164,4 +170,11 @@ struct uffdio_zeropage {
 	__s64 zeropage;
 };
 
+struct uffdio_writeprotect {
+   struct uffdio_range range;
+   /* !WP means undo writeprotect. DONTWAKE is valid only with !WP */
+#define UFFDIO_WRITEPROTECT_MODE_WP        ((__u64)1<<0)
+#define UFFDIO_WRITEPROTECT_MODE_DONTWAKE  ((__u64)1<<1)
+   __u64 mode;
+};
 #endif /* _LINUX_USERFAULTFD_H */
