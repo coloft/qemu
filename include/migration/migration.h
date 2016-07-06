@@ -221,7 +221,9 @@ void unix_start_incoming_migration(const char *path, Error **errp);
 
 void unix_start_outgoing_migration(MigrationState *s, const char *path, Error **errp);
 
-void fd_start_incoming_migration(const char *path, Error **errp);
+void fd_start_incoming_migration(const char *path, int fd, Error **errp);
+
+void file_start_incoming_migration(const char *filename, Error **errp);
 
 void fd_start_outgoing_migration(MigrationState *s, const char *fdname,
                                  int outfd, Error **errp);
