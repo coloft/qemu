@@ -2091,6 +2091,19 @@
             '*read-pattern': 'QuorumReadPattern' } }
 
 ##
+# @ReplicationMode
+#
+# An enumeration of replication modes.
+#
+# @primary: Primary mode, the vm's state will be sent to secondary QEMU.
+#
+# @secondary: Secondary mode, receive the vm's state from primary QEMU.
+#
+# Since: 2.8
+##
+{ 'enum' : 'ReplicationMode', 'data' : [ 'primary', 'secondary' ] }
+
+##
 # @GlusterTransport
 #
 # An enumeration of Gluster transport types
