@@ -534,6 +534,17 @@ static void *postcopy_ram_fault_thread(void *opaque)
                 migrate_send_rp_req_pages(mis, NULL,
                                           rb_offset, hostpagesize);
             }
+        } else { /* UFFDIO_REGISTER_MODE_WP */
+            uint64_t host = msg.arg.pagefault.address;
+
+            error_report("%s: %"PRIx64 " fault and remove write protect!",
+                    __func__, (uint64_t)msg.arg.pagefault.address);
+            host &= ~(hostpagesize - 1);
+            ret = ram_set_pages_wp(host, getpagesize(), true,
+                    us->userfault_fd);
+            if (ret < 0) {
+                error_report("Remove page's write-protect failed");
+            }
         }
     }
     trace_postcopy_ram_fault_thread_exit();
