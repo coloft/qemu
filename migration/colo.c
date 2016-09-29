@@ -22,6 +22,7 @@
 #include "qapi-event.h"
 #include "block/block.h"
 #include "replication.h"
+#include "net/colo-compare.h"
 
 static bool vmstate_loading;
 
@@ -379,6 +380,8 @@ static int colo_do_checkpoint_transaction(MigrationState *s,
     vm_start();
     qemu_mutex_unlock_iothread();
     trace_colo_vm_state_change("stop", "run");
+
+    colo_compare_do_checkpoint();
 
 out:
     if (local_err) {
