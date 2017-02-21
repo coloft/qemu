@@ -31,6 +31,7 @@
 #include "net/colo.h"
 #include "net/colo-compare.h"
 #include "migration/migration.h"
+#include "qmp-commands.h"
 
 #define TYPE_COLO_COMPARE "colo-compare"
 #define COLO_COMPARE(obj) \
@@ -372,6 +373,7 @@ static int colo_old_packet_check_one(Packet *pkt, int64_t *check_time)
 
 static void colo_compare_inconsistent_notify(void)
 {
+    fprintf(stderr, "Notify to do checkpoint from compare\n");
     notifier_list_notify(&colo_compare_notifiers,
                 migrate_get_current());
 }
@@ -579,10 +581,21 @@ void colo_notify_compares_event(void *opaque, int event, Error **errp)
     while (event_unhandled_count) {
         qemu_cond_wait(&event_complete_cond, &event_mtx);
     }
-
+    fprintf(stderr, "OK Finish all compare checkpoint\n");
 fail:
     qemu_mutex_unlock(&event_mtx);
 }
+
+void qmp_hello_world(Error **errp) 
+{
+    CompareState *s;
+
+    QTAILQ_FOREACH(s, &net_compares, next) {
+        filter_notifier_set(s->notifier, 2);
+    } 
+    fprintf(stderr, "Hello, world!\n"); 
+
+} 
 
 static void colo_flush_packets(void *opaque, void *user_data);
 

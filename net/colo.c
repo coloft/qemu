@@ -276,6 +276,7 @@ FilterNotifier *filter_noitifier_new(FilterNotifierCallback *cb,
     }
     notify->pfd.fd = event_notifier_get_fd(&notify->event);
     notify->pfd.events = G_IO_IN | G_IO_HUP | G_IO_ERR;
+    notify->pfd.revents = 0;
     notify->cb = cb;
     notify->opaque = opaque;
     g_source_add_poll(&notify->source, &notify->pfd);

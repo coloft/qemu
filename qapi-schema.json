@@ -93,6 +93,24 @@
 { 'command': 'qmp_capabilities' }
 
 ##
+# @hello_world:
+#
+# Hello_world.
+#
+# Arguments: None.
+#
+# Example:
+#
+# -> { "execute": "hello_world" }
+# <- { "return": {} }
+#
+#
+# Since: 2.9
+#
+##
+{ 'command': 'hello_world' }
+
+##
 # @LostTickPolicy:
 #
 # Policy for handling lost ticks in timer devices.
