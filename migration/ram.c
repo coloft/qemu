@@ -2705,7 +2705,9 @@ int colo_init_ram_cache(void)
 {
     RAMBlock *block;
     int64_t ram_cache_pages = last_ram_offset() >> TARGET_PAGE_BITS;
-
+    
+    qemu_mutex_lock_iothread();
+    qemu_mutex_lock_ramlist();
     rcu_read_lock();
     QLIST_FOREACH_RCU(block, &ram_list.blocks, next) {
         block->colo_cache = qemu_anon_ram_alloc(block->used_length, NULL);
@@ -2718,6 +2720,9 @@ int colo_init_ram_cache(void)
         memcpy(block->colo_cache, block->host, block->used_length);
     }
     rcu_read_unlock();
+    qemu_mutex_unlock_ramlist();
+    qemu_mutex_unlock_iothread();
+
     ram_cache_enable = true;
     /*
     * Record the dirty pages that sent by PVM, we use this dirty bitmap together
@@ -2727,7 +2732,10 @@ int colo_init_ram_cache(void)
     migration_bitmap_rcu = g_new0(struct BitmapRcu, 1);
     migration_bitmap_rcu->bmap = bitmap_new(ram_cache_pages);
     migration_dirty_pages = 0;
+ 
+    qemu_mutex_lock_iothread();
     memory_global_dirty_log_start();
+    qemu_mutex_unlock_iothread();
 
     return 0;
 
